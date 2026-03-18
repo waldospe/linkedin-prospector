@@ -1,6 +1,6 @@
 import './globals.css';
 import { Providers } from '@/components/providers';
-import Navigation from '@/components/navigation';
+import ConditionalNavigation from '@/components/conditional-navigation';
 
 export const metadata = {
   title: 'LinkedIn Prospector',
@@ -17,7 +17,7 @@ export default function RootLayout({
       <body>
         <Providers>
           <div className="flex min-h-screen bg-zinc-950">
-            <Navigation />
+            <ConditionalNavigation />
             <main className="flex-1 p-8 overflow-auto">
               {children}
             </main>

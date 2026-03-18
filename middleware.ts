@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server';
-import { getToken } from 'next-auth/jwt';
 import type { NextRequest } from 'next/server';
 
-export async function middleware(request: NextRequest) {
+export function middleware(request: NextRequest) {
   const url = request.nextUrl.clone();
   
-  // Allow access to login, auth endpoints, and public assets
+  // Allow access to login and auth endpoints
   if (
     url.pathname === '/login' || 
     url.pathname.startsWith('/api/auth') ||
@@ -16,13 +15,10 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Check for NextAuth session token
-  const token = await getToken({ 
-    req: request, 
-    secret: process.env.NEXTAUTH_SECRET || process.env.JWT_SECRET 
-  });
+  // Check for auth cookie
+  const auth = request.cookies.get('auth');
   
-  if (!token) {
+  if (!auth || auth.value !== 'true') {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
