@@ -2,10 +2,11 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { signIn } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Lock, Eye, EyeOff, Linkedin } from 'lucide-react';
+import { Lock, Eye, EyeOff, Linkedin, Chrome } from 'lucide-react';
 
 export default function LoginPage() {
   const [password, setPassword] = useState('');
@@ -15,26 +16,24 @@ export default function LoginPage() {
   const [isSetup, setIsSetup] = useState(false);
   const router = useRouter();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
     try {
-      const res = await fetch('/api/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password, setup: isSetup })
+      const result = await signIn('credentials', {
+        password,
+        redirect: false,
+        callbackUrl: '/'
       });
 
-      const data = await res.json();
-
-      if (res.ok) {
+      if (result?.ok) {
         router.push('/');
         router.refresh();
       } else {
-        setError(data.error || 'Login failed');
-        if (data.error?.includes('setup')) {
+        setError(result?.error || 'Login failed');
+        if (result?.error?.includes('setup')) {
           setIsSetup(true);
         }
       }
@@ -45,20 +44,53 @@ export default function LoginPage() {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    setLoading(true);
+    try {
+      await signIn('google', { callbackUrl: '/' });
+    } catch {
+      setError('Google sign-in failed');
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-zinc-950 p-4">
       <Card className="w-full max-w-md border-zinc-800 bg-zinc-900">
         <CardHeader className="space-y-1">
           <div className="flex items-center gap-2 mb-2">
             <Linkedin className="w-6 h-6 text-blue-500" />
-            <CardTitle className="text-xl text-white">Unipile Dashboard</CardTitle>
+            <CardTitle className="text-xl text-white">LinkedIn Prospector</CardTitle>
           </div>
           <CardDescription className="text-zinc-400">
-            {isSetup ? 'Set up your admin password' : 'Enter your password to continue'}
+            Sign in to manage your LinkedIn outreach
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
+        <CardContent className="space-y-4">
+          {/* Google Sign In */}
+          <Button 
+            onClick={handleGoogleSignIn}
+            variant="outline"
+            className="w-full bg-white hover:bg-gray-100 text-gray-900 border-0"
+            disabled={loading}
+          >
+            <Chrome className="w-5 h-5 mr-2" />
+            Continue with Google
+          </Button>
+
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-zinc-700" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-zinc-900 px-2 text-zinc-500">
+                Or continue with password
+              </span>
+            </div>
+          </div>
+
+          {/* Password Sign In */}
+          <form onSubmit={handlePasswordSubmit} className="space-y-4">
             <div className="relative">
               <Input
                 type={showPassword ? 'text' : 'password'}
@@ -80,10 +112,11 @@ export default function LoginPage() {
             )}
             <Button 
               type="submit" 
-              className="w-full bg-blue-600 hover:bg-blue-700"
+              variant="outline"
+              className="w-full border-zinc-700 hover:bg-zinc-800"
               disabled={loading}
             >
-              {loading ? 'Please wait...' : isSetup ? 'Set Password' : 'Sign In'}
+              {loading ? 'Please wait...' : isSetup ? 'Set Password' : 'Sign In with Password'}
             </Button>
           </form>
         </CardContent>
