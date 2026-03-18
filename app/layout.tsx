@@ -1,3 +1,4 @@
+import './globals.css';
 import { Providers } from '@/components/providers';
 import Navigation from '@/components/navigation';
 

@@ -1,5 +1,5 @@
 [Unit]
-Description=Unipile Dashboard
+Description=LinkedIn Prospector
 After=network.target
 
 [Service]
@@ -10,7 +10,9 @@ Environment=NODE_ENV=production
 Environment=PORT=3462
 Environment=HOSTNAME=0.0.0.0
 Environment=DATABASE_PATH=/home/ubuntu/apps/linkedin-prospector/data/app.db
-Environment=JWT_SECRET=linkedin-prospector-secret-key-change-me
+Environment=JWT_SECRET=moco-linkedin-prospector-secure-key
+Environment=NEXTAUTH_SECRET=moco-linkedin-prospector-secure-key
+Environment=NEXTAUTH_URL=https://lp.moco.inc
 ExecStart=/usr/bin/npm start
 Restart=always
 RestartSec=10
