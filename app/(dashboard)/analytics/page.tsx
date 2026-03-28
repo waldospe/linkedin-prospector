@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid } from 'recharts';
-import { TrendingUp, Send, MessageCircle, Reply, BarChart3 } from 'lucide-react';
+import { TrendingUp, Send, MessageCircle, Reply, BarChart3, Users } from 'lucide-react';
+import { POSITIVE_STAGES, NEGATIVE_STAGES, STAGE_MAP, stageColors } from '@/lib/constants';
 
 interface Stats {
   daily: Array<{
@@ -20,16 +21,18 @@ interface Stats {
 
 export default function AnalyticsPage() {
   const [stats, setStats] = useState<Stats>({ daily: [], today: { connections_sent: 0, messages_sent: 0, replies_received: 0 } });
+  const [funnel, setFunnel] = useState<Array<{ status: string; count: number }>>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => { fetchStats(); }, []);
-
-  const fetchStats = async () => {
-    try {
-      const res = await fetch('/api/stats?days=30');
-      setStats(await res.json());
-    } finally { setLoading(false); }
-  };
+  useEffect(() => {
+    Promise.all([
+      fetch('/api/stats?days=30').then(r => r.json()),
+      fetch('/api/contacts/funnel').then(r => r.json()),
+    ]).then(([statsData, funnelData]) => {
+      setStats(statsData);
+      setFunnel(Array.isArray(funnelData) ? funnelData : []);
+    }).finally(() => setLoading(false));
+  }, []);
 
   const chartData = stats.daily.slice(0, 14).reverse().map(day => ({
     date: new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
@@ -42,25 +45,21 @@ export default function AnalyticsPage() {
   const totalMessages = stats.daily.reduce((sum, d) => sum + d.messages_sent, 0) + stats.today.messages_sent;
   const totalReplies = stats.daily.reduce((sum, d) => sum + d.replies_received, 0) + stats.today.replies_received;
   const replyRate = totalMessages > 0 ? (totalReplies / totalMessages) * 100 : 0;
-  const connectionRate = totalConnections > 0 ? (totalMessages / totalConnections) * 100 : 0;
+
+  const funnelMap = Object.fromEntries(funnel.map(f => [f.status, f.count]));
+  const totalContacts = funnel.reduce((sum, f) => sum + f.count, 0);
+  const maxPositive = Math.max(...POSITIVE_STAGES.map(s => funnelMap[s] || 0), 1);
+
+  const tooltipStyle = {
+    contentStyle: { backgroundColor: 'hsl(228 14% 10%)', border: '1px solid hsl(228 11% 18%)', borderRadius: '8px', fontSize: '12px' },
+    labelStyle: { color: 'hsl(220 10% 50%)', marginBottom: '4px' },
+  };
 
   const statCards = [
     { label: 'Connections', value: totalConnections, icon: Send, color: 'text-blue-400', bg: 'bg-blue-500/10 border-blue-500/15' },
     { label: 'Messages', value: totalMessages, icon: MessageCircle, color: 'text-indigo-400', bg: 'bg-indigo-500/10 border-indigo-500/15' },
     { label: 'Replies', value: totalReplies, icon: Reply, color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/15' },
     { label: 'Reply Rate', value: `${replyRate.toFixed(1)}%`, icon: TrendingUp, color: 'text-violet-400', bg: 'bg-violet-500/10 border-violet-500/15' },
-  ];
-
-  const tooltipStyle = {
-    contentStyle: { backgroundColor: 'hsl(225 15% 9%)', border: '1px solid hsl(225 12% 16%)', borderRadius: '8px', fontSize: '12px' },
-    labelStyle: { color: 'hsl(220 10% 54%)', marginBottom: '4px' },
-    itemStyle: { padding: '1px 0' },
-  };
-
-  const rates = [
-    { label: 'Connection Acceptance', value: connectionRate, color: 'bg-blue-500' },
-    { label: 'Message Reply Rate', value: replyRate, color: 'bg-indigo-500' },
-    { label: 'Overall Response', value: totalConnections > 0 ? (totalReplies / totalConnections) * 100 : 0, color: 'bg-emerald-500' },
   ];
 
   return (
@@ -85,6 +84,101 @@ export default function AnalyticsPage() {
         ))}
       </div>
 
+      {/* Outreach Funnel — full width */}
+      <div className="glass rounded-xl p-6">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-2">
+            <Users size={16} className="text-muted-foreground" />
+            <span className="text-sm font-medium text-white">Outreach Funnel</span>
+          </div>
+          <span className="text-xs text-muted-foreground">{totalContacts} total contacts</span>
+        </div>
+
+        {totalContacts === 0 ? (
+          <div className="py-8 text-center text-muted-foreground text-sm">Import contacts to see your funnel</div>
+        ) : (
+          <div className="grid grid-cols-2 gap-8">
+            {/* Positive funnel */}
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Pipeline</p>
+              <div className="space-y-3">
+                {POSITIVE_STAGES.map((stageKey, i) => {
+                  const stage = STAGE_MAP[stageKey];
+                  const count = funnelMap[stageKey] || 0;
+                  const pct = totalContacts > 0 ? (count / totalContacts) * 100 : 0;
+                  const barWidth = (count / maxPositive) * 100;
+                  const colors = stageColors[stageKey];
+                  return (
+                    <div key={stageKey} className="animate-slide-up" style={{ animationDelay: `${i * 40}ms` }}>
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full ${colors.dot}`} />
+                          <span className={`text-xs font-medium ${colors.text}`}>{stage.label}</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm font-semibold text-white tabular-nums">{count}</span>
+                          <span className="text-[10px] text-muted-foreground tabular-nums w-10 text-right">{pct.toFixed(0)}%</span>
+                        </div>
+                      </div>
+                      <div className="h-3 bg-secondary rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full transition-all duration-700 ${colors.bar}`} style={{ width: `${barWidth}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Negative outcomes */}
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Outcomes</p>
+              <div className="space-y-3">
+                {NEGATIVE_STAGES.map((stageKey) => {
+                  const stage = STAGE_MAP[stageKey];
+                  const count = funnelMap[stageKey] || 0;
+                  const pct = totalContacts > 0 ? (count / totalContacts) * 100 : 0;
+                  const colors = stageColors[stageKey];
+                  return (
+                    <div key={stageKey} className="flex items-center justify-between p-3 rounded-lg bg-secondary/30">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${colors.dot}`} />
+                        <span className={`text-xs font-medium ${colors.text}`}>{stage.label}</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-semibold text-white tabular-nums">{count}</span>
+                        <span className="text-[10px] text-muted-foreground tabular-nums w-10 text-right">{pct.toFixed(0)}%</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Conversion rates */}
+              <div className="mt-6">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Conversion Rates</p>
+                <div className="space-y-2">
+                  {[
+                    { label: 'Invite → Connected', from: 'invite_sent', to: 'connected' },
+                    { label: 'Connected → Replied', from: 'connected', to: 'replied' },
+                    { label: 'Overall Response', from: 'new', to: 'replied' },
+                  ].map(({ label, from, to }) => {
+                    const fromCount = (funnelMap[from] || 0) + (funnelMap[to] || 0);
+                    const toCount = funnelMap[to] || 0;
+                    const rate = fromCount > 0 ? (toCount / fromCount) * 100 : 0;
+                    return (
+                      <div key={label} className="flex items-center justify-between p-3 rounded-lg bg-secondary/30">
+                        <span className="text-xs text-muted-foreground">{label}</span>
+                        <span className="text-sm font-semibold text-white tabular-nums">{rate.toFixed(1)}%</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Charts */}
       <div className="grid grid-cols-2 gap-6">
         <div className="glass rounded-xl p-5">
@@ -96,7 +190,7 @@ export default function AnalyticsPage() {
             {chartData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData} barGap={2}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(225 12% 14%)" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(228 11% 18%)" />
                   <XAxis dataKey="date" stroke="hsl(220 10% 40%)" fontSize={10} tickLine={false} axisLine={false} />
                   <YAxis stroke="hsl(220 10% 40%)" fontSize={10} tickLine={false} axisLine={false} />
                   <Tooltip {...tooltipStyle} />
@@ -120,7 +214,7 @@ export default function AnalyticsPage() {
             {chartData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(225 12% 14%)" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(228 11% 18%)" />
                   <XAxis dataKey="date" stroke="hsl(220 10% 40%)" fontSize={10} tickLine={false} axisLine={false} />
                   <YAxis stroke="hsl(220 10% 40%)" fontSize={10} tickLine={false} axisLine={false} />
                   <Tooltip {...tooltipStyle} />
@@ -132,27 +226,6 @@ export default function AnalyticsPage() {
               <div className="flex items-center justify-center h-full text-muted-foreground text-sm">No data available</div>
             )}
           </div>
-        </div>
-      </div>
-
-      {/* Performance summary */}
-      <div className="glass rounded-xl p-5">
-        <div className="flex items-center gap-2 mb-5">
-          <TrendingUp size={16} className="text-muted-foreground" />
-          <span className="text-sm font-medium text-white">Performance Summary</span>
-        </div>
-        <div className="space-y-4">
-          {rates.map(({ label, value, color }) => (
-            <div key={label}>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs font-medium text-muted-foreground">{label}</span>
-                <span className="text-xs font-medium text-white tabular-nums">{value.toFixed(1)}%</span>
-              </div>
-              <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
-                <div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${Math.min(value, 100)}%` }} />
-              </div>
-            </div>
-          ))}
         </div>
       </div>
     </div>

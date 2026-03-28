@@ -37,26 +37,31 @@ function initDb() {
       db.exec(`DROP TABLE IF EXISTS ${t}`);
     }
     db.exec('DELETE FROM schema_version');
-    db.exec('INSERT INTO schema_version (version) VALUES (3)');
+    db.exec('INSERT INTO schema_version (version) VALUES (4)');
   }
 
-  if (currentVersion === 2) {
+  if (currentVersion >= 2 && currentVersion < 4) {
     // v2 -> v3: Split name into first_name + last_name
     const cols = db.pragma('table_info(contacts)') as any[];
     if (cols && !cols.find((c: any) => c.name === 'first_name')) {
       db.exec(`ALTER TABLE contacts ADD COLUMN first_name TEXT DEFAULT ''`);
       db.exec(`ALTER TABLE contacts ADD COLUMN last_name TEXT DEFAULT ''`);
-      // Migrate existing name data
       const rows = db.prepare('SELECT id, name FROM contacts').all() as any[];
       const update = db.prepare('UPDATE contacts SET first_name = ?, last_name = ? WHERE id = ?');
       for (const row of rows) {
         const parts = (row.name || '').trim().split(/\s+/);
-        const firstName = parts[0] || '';
-        const lastName = parts.slice(1).join(' ') || '';
-        update.run(firstName, lastName, row.id);
+        update.run(parts[0] || '', parts.slice(1).join(' ') || '', row.id);
       }
     }
-    db.exec('UPDATE schema_version SET version = 3');
+    // v3 -> v4: Migrate old statuses to new funnel stages
+    db.exec(`UPDATE contacts SET status = 'new' WHERE status = 'pending'`);
+    db.exec(`UPDATE contacts SET status = 'msg_sent' WHERE status = 'messaged'`);
+    // Add message_template column to queue for resolved template text
+    const qCols = db.pragma('table_info(queue)') as any[];
+    if (qCols && !qCols.find((c: any) => c.name === 'message_text')) {
+      db.exec(`ALTER TABLE queue ADD COLUMN message_text TEXT`);
+    }
+    db.exec('UPDATE schema_version SET version = 4');
   }
 
   // Teams
@@ -108,7 +113,7 @@ function initDb() {
       company TEXT,
       title TEXT,
       source TEXT DEFAULT 'manual',
-      status TEXT DEFAULT 'pending',
+      status TEXT DEFAULT 'new',
       pipedrive_id TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
@@ -136,6 +141,7 @@ function initDb() {
       step_number INTEGER DEFAULT 1,
       action_type TEXT NOT NULL,
       status TEXT DEFAULT 'pending',
+      message_text TEXT,
       scheduled_at DATETIME,
       executed_at DATETIME,
       error TEXT
@@ -423,6 +429,13 @@ export const contacts = {
   delete: (id: number, userId: number) => {
     return getDb().prepare('DELETE FROM contacts WHERE id = ? AND user_id = ?').run(id, userId);
   },
+  getFunnelCounts: (userId: number) => {
+    return getDb().prepare(`
+      SELECT status, COUNT(*) as count
+      FROM contacts WHERE user_id = ?
+      GROUP BY status
+    `).all(userId) as Array<{ status: string; count: number }>;
+  },
 };
 
 // Sequences (scoped to user)
@@ -450,7 +463,8 @@ export const sequences = {
 export const queue = {
   getAll: (userId: number) => {
     return getDb().prepare(`
-      SELECT q.*, c.name as contact_name, c.linkedin_url, s.name as sequence_name
+      SELECT q.*, c.name as contact_name, c.linkedin_url, c.first_name, c.last_name, c.company, c.title,
+             s.name as sequence_name
       FROM queue q
       JOIN contacts c ON q.contact_id = c.id
       LEFT JOIN sequences s ON q.sequence_id = s.id
@@ -460,7 +474,8 @@ export const queue = {
   },
   getPending: (userId: number) => {
     return getDb().prepare(`
-      SELECT q.*, c.name as contact_name, c.linkedin_url, s.name as sequence_name
+      SELECT q.*, c.name as contact_name, c.linkedin_url, c.first_name, c.last_name, c.company, c.title,
+             s.name as sequence_name, s.steps as sequence_steps
       FROM queue q
       JOIN contacts c ON q.contact_id = c.id
       LEFT JOIN sequences s ON q.sequence_id = s.id
@@ -468,11 +483,11 @@ export const queue = {
       ORDER BY q.scheduled_at
     `).all(userId);
   },
-  create: (userId: number, data: { contact_id: number; sequence_id?: number; step_number?: number; action_type: string; scheduled_at?: string }) => {
+  create: (userId: number, data: { contact_id: number; sequence_id?: number; step_number?: number; action_type: string; message_text?: string; scheduled_at?: string }) => {
     return getDb().prepare(`
-      INSERT INTO queue (user_id, contact_id, sequence_id, step_number, action_type, scheduled_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(userId, data.contact_id, data.sequence_id || null, data.step_number || 1, data.action_type, data.scheduled_at || null);
+      INSERT INTO queue (user_id, contact_id, sequence_id, step_number, action_type, message_text, scheduled_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(userId, data.contact_id, data.sequence_id || null, data.step_number || 1, data.action_type, data.message_text || null, data.scheduled_at || null);
   },
   updateStatus: (id: number, status: string, userId: number, error?: string) => {
     if (error) {
@@ -484,6 +499,12 @@ export const queue = {
         .run(status, id, userId);
     }
     return getDb().prepare('UPDATE queue SET status = ? WHERE id = ? AND user_id = ?').run(status, id, userId);
+  },
+  getNextForSequence: (userId: number, contactId: number, sequenceId: number, currentStep: number) => {
+    return getDb().prepare(`
+      SELECT * FROM queue
+      WHERE user_id = ? AND contact_id = ? AND sequence_id = ? AND step_number = ? AND status = 'pending'
+    `).get(userId, contactId, sequenceId, currentStep + 1);
   },
 };
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserFromRequest } from '@/lib/api-auth';
 import { contacts } from '@/lib/db';
+import { normalizeLinkedInUrl, isValidLinkedInUrl } from '@/lib/constants';
 
 // Known contact fields and common CSV header aliases
 const FIELD_ALIASES: Record<string, string[]> = {
@@ -61,6 +62,7 @@ export async function POST(req: NextRequest) {
       const rows = body.rows as Array<Record<string, string>>;
       const mapping = body.mapping as Record<string, string>; // csv_header -> our_field
 
+      let invalidUrls = 0;
       const mapped = rows.map((row) => {
         const contact: Record<string, string> = {};
         for (const [csvHeader, ourField] of Object.entries(mapping)) {
@@ -68,12 +70,20 @@ export async function POST(req: NextRequest) {
             contact[ourField] = row[csvHeader] || '';
           }
         }
+        // Normalize and validate LinkedIn URLs
+        if (contact.linkedin_url) {
+          contact.linkedin_url = normalizeLinkedInUrl(contact.linkedin_url);
+          if (contact.linkedin_url && !isValidLinkedInUrl(contact.linkedin_url)) {
+            invalidUrls++;
+            contact.linkedin_url = ''; // clear invalid URLs
+          }
+        }
         return contact;
       }).filter((c) => c.first_name || c.last_name || c.name); // skip empty
 
       const count = contacts.bulkCreate(userId, mapped);
 
-      return NextResponse.json({ imported: count, total: rows.length });
+      return NextResponse.json({ imported: count, total: rows.length, invalidUrls });
     }
 
     return NextResponse.json({ error: 'Invalid request. Send { headers } or { rows, mapping }' }, { status: 400 });

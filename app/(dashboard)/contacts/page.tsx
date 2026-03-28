@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Trash2, Upload, ExternalLink, Search, Users, FileSpreadsheet, Link2, CheckCircle2, AlertCircle, ArrowRight } from 'lucide-react';
+import { FUNNEL_STAGES, stageColors, STAGE_MAP } from '@/lib/constants';
 
 interface Contact {
   id: number;
@@ -24,11 +25,10 @@ interface Contact {
   status: string;
 }
 
-const statusConfig: Record<string, { label: string; dot: string; bg: string }> = {
-  pending: { label: 'Pending', dot: 'bg-amber-400', bg: 'bg-amber-500/10 text-amber-400' },
-  connected: { label: 'Connected', dot: 'bg-blue-400', bg: 'bg-blue-500/10 text-blue-400' },
-  messaged: { label: 'Messaged', dot: 'bg-indigo-400', bg: 'bg-indigo-500/10 text-indigo-400' },
-  replied: { label: 'Replied', dot: 'bg-emerald-400', bg: 'bg-emerald-500/10 text-emerald-400' },
+const getStatusDisplay = (status: string) => {
+  const stage = STAGE_MAP[status];
+  const colors = stageColors[status] || stageColors.new;
+  return { label: stage?.label || status, dot: colors.dot, bg: `${colors.bg} ${colors.text}` };
 };
 
 type ImportStep = 'choose' | 'csv-upload' | 'sheets-url' | 'mapping' | 'importing' | 'done';
@@ -286,7 +286,7 @@ export default function ContactsPage() {
       ) : (
         <div className="space-y-2">
           {filtered.map((contact) => {
-            const cfg = statusConfig[contact.status] || statusConfig.pending;
+            const cfg = getStatusDisplay(contact.status);
             return (
               <div key={contact.id} className="glass glass-hover rounded-xl p-4 flex items-center justify-between">
                 <div className="flex items-center gap-4 min-w-0">
@@ -313,14 +313,13 @@ export default function ContactsPage() {
                     {cfg.label}
                   </span>
                   <Select value={contact.status} onValueChange={(v) => { if (v) updateStatus(contact.id, v); }}>
-                    <SelectTrigger className="w-28 h-8 bg-secondary/50 border-border text-xs">
+                    <SelectTrigger className="w-36 h-8 bg-secondary/50 border-border text-xs">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="pending">Pending</SelectItem>
-                      <SelectItem value="connected">Connected</SelectItem>
-                      <SelectItem value="messaged">Messaged</SelectItem>
-                      <SelectItem value="replied">Replied</SelectItem>
+                      {FUNNEL_STAGES.map(s => (
+                        <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <button
