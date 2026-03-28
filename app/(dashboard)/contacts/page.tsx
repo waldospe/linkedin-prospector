@@ -75,7 +75,8 @@ export default function ContactsPage() {
     } finally { setLoading(false); }
   };
 
-  const lookupLinkedIn = async (url: string) => {
+  const lookupLinkedIn = async (urlInput: string) => {
+    const url = urlInput?.trim();
     if (!url || lookingUp) return;
     setLookingUp(true);
     setLookupError('');
@@ -86,20 +87,22 @@ export default function ContactsPage() {
         body: JSON.stringify({ linkedin_url: url }),
       });
       const data = await res.json();
-      if (res.ok) {
+      if (res.ok && (data.first_name || data.last_name || data.name || data.company || data.title)) {
         setNewContact(prev => ({
           ...prev,
           first_name: data.first_name || prev.first_name,
           last_name: data.last_name || prev.last_name,
           company: data.company || prev.company,
           title: data.title || prev.title,
-          linkedin_url: data.linkedin_url || prev.linkedin_url,
+          linkedin_url: data.linkedin_url || url,
         }));
-      } else {
+      } else if (!res.ok) {
         setLookupError(data.error || 'Lookup failed');
+      } else {
+        setLookupError('No profile data returned. You can fill in the fields manually.');
       }
-    } catch {
-      setLookupError('Failed to look up profile');
+    } catch (err: any) {
+      setLookupError('Failed to look up profile: ' + (err.message || ''));
     } finally {
       setLookingUp(false);
     }
@@ -304,7 +307,7 @@ export default function ContactsPage() {
                       placeholder="https://linkedin.com/in/..."
                       value={newContact.linkedin_url}
                       onChange={(e) => setNewContact({ ...newContact, linkedin_url: e.target.value })}
-                      onBlur={(e) => { if (e.target.value.includes('linkedin.com')) lookupLinkedIn(e.target.value); }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); lookupLinkedIn(newContact.linkedin_url); } }}
                       className="bg-background/50 border-border h-10 flex-1"
                     />
                     <button
