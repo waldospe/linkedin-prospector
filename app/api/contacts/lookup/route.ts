@@ -55,35 +55,44 @@ export async function POST(req: NextRequest) {
     }
 
     const profile = await res.json();
-    console.log('LOOKUP profile keys:', Object.keys(profile));
+    console.log('LOOKUP full response:', JSON.stringify(profile, null, 2));
 
-    // Extract fields
+    // Extract name fields
     const firstName = profile.first_name || profile.firstName || '';
     const lastName = profile.last_name || profile.lastName || '';
     const fullName = profile.name || profile.display_name
       || [firstName, lastName].filter(Boolean).join(' ') || '';
-    const headline = profile.headline || profile.title || '';
 
-    // Try to extract company from experience or headline
-    let company = '';
-    if (profile.experience && Array.isArray(profile.experience) && profile.experience.length > 0) {
-      company = profile.experience[0].company_name || profile.experience[0].company || '';
-    }
-    if (!company && profile.company_name) {
-      company = profile.company_name;
-    }
-    if (!company && profile.company?.name) {
-      company = profile.company.name;
-    }
-
-    // Try to extract title from experience or headline
+    // Find current job title and company from experience/positions
     let title = '';
-    if (profile.experience && Array.isArray(profile.experience) && profile.experience.length > 0) {
-      title = profile.experience[0].title || '';
+    let company = '';
+
+    // Check linkedin_sections for experience data
+    const sections = profile.linkedin_sections || profile.sections || {};
+    const experience = profile.experience || sections.experience || profile.positions || sections.positions || [];
+
+    // Experience might be an object with items array
+    const expItems = Array.isArray(experience) ? experience : (experience.items || experience.entries || []);
+
+    if (expItems.length > 0) {
+      // First item is typically current/most recent position
+      const current = expItems[0];
+      title = current.title || current.position || current.role || '';
+      company = current.company_name || current.company || current.organization || current.org_name || '';
+
+      // If company is an object, get its name
+      if (typeof company === 'object' && company !== null) {
+        company = (company as any).name || (company as any).company_name || '';
+      }
     }
-    if (!title) {
-      title = headline;
-    }
+
+    // Fallback: try top-level fields
+    if (!title) title = profile.occupation || profile.job_title || '';
+    if (!company) company = profile.company_name || profile.company?.name || profile.organization || '';
+
+    // Last resort for title: use headline but NOT if we found a real title
+    const headline = profile.headline || '';
+    if (!title && headline) title = headline;
 
     return NextResponse.json({
       first_name: firstName,
@@ -91,6 +100,7 @@ export async function POST(req: NextRequest) {
       name: fullName,
       title,
       company,
+      headline,
       linkedin_url: url,
     });
   } catch (error: any) {
