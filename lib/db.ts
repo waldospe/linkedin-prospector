@@ -28,14 +28,35 @@ function initDb() {
 
   const version = db.prepare('SELECT version FROM schema_version LIMIT 1').get() as { version: number } | undefined;
 
-  if (!version || version.version < 2) {
+  const currentVersion = version?.version || 0;
+
+  if (currentVersion < 2) {
     // Drop old v1 tables if they exist
     const oldTables = ['daily_stats', 'messages', 'queue', 'templates', 'sequences', 'contacts', 'accounts', 'config'];
     for (const t of oldTables) {
       db.exec(`DROP TABLE IF EXISTS ${t}`);
     }
     db.exec('DELETE FROM schema_version');
-    db.exec('INSERT INTO schema_version (version) VALUES (2)');
+    db.exec('INSERT INTO schema_version (version) VALUES (3)');
+  }
+
+  if (currentVersion === 2) {
+    // v2 -> v3: Split name into first_name + last_name
+    const cols = db.pragma('table_info(contacts)') as any[];
+    if (cols && !cols.find((c: any) => c.name === 'first_name')) {
+      db.exec(`ALTER TABLE contacts ADD COLUMN first_name TEXT DEFAULT ''`);
+      db.exec(`ALTER TABLE contacts ADD COLUMN last_name TEXT DEFAULT ''`);
+      // Migrate existing name data
+      const rows = db.prepare('SELECT id, name FROM contacts').all() as any[];
+      const update = db.prepare('UPDATE contacts SET first_name = ?, last_name = ? WHERE id = ?');
+      for (const row of rows) {
+        const parts = (row.name || '').trim().split(/\s+/);
+        const firstName = parts[0] || '';
+        const lastName = parts.slice(1).join(' ') || '';
+        update.run(firstName, lastName, row.id);
+      }
+    }
+    db.exec('UPDATE schema_version SET version = 3');
   }
 
   // Teams
@@ -80,6 +101,8 @@ function initDb() {
     CREATE TABLE IF NOT EXISTS contacts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      first_name TEXT NOT NULL DEFAULT '',
+      last_name TEXT NOT NULL DEFAULT '',
       name TEXT NOT NULL,
       linkedin_url TEXT,
       company TEXT,
@@ -333,11 +356,66 @@ export const contacts = {
   getByStatus: (status: string, userId: number) => {
     return getDb().prepare('SELECT * FROM contacts WHERE status = ? AND user_id = ?').all(status, userId);
   },
-  create: (userId: number, data: { name: string; linkedin_url?: string; company?: string; title?: string; source?: string; pipedrive_id?: string }) => {
+  create: (userId: number, data: { first_name?: string; last_name?: string; name?: string; linkedin_url?: string; company?: string; title?: string; source?: string; pipedrive_id?: string }) => {
+    const firstName = data.first_name || '';
+    const lastName = data.last_name || '';
+    // Auto-generate name from first/last if not provided, or split name into first/last
+    let fullName = data.name || '';
+    let fn = firstName;
+    let ln = lastName;
+    if (fullName && !fn && !ln) {
+      const parts = fullName.trim().split(/\s+/);
+      fn = parts[0] || '';
+      ln = parts.slice(1).join(' ') || '';
+    } else if (!fullName) {
+      fullName = [fn, ln].filter(Boolean).join(' ');
+    }
     return getDb().prepare(`
-      INSERT INTO contacts (user_id, name, linkedin_url, company, title, source, pipedrive_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(userId, data.name, data.linkedin_url || '', data.company || '', data.title || '', data.source || 'manual', data.pipedrive_id || null);
+      INSERT INTO contacts (user_id, first_name, last_name, name, linkedin_url, company, title, source, pipedrive_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(userId, fn, ln, fullName, data.linkedin_url || '', data.company || '', data.title || '', data.source || 'manual', data.pipedrive_id || null);
+  },
+  bulkCreate: (userId: number, rows: Array<{ first_name?: string; last_name?: string; name?: string; linkedin_url?: string; company?: string; title?: string; source?: string }>) => {
+    const insert = getDb().prepare(`
+      INSERT INTO contacts (user_id, first_name, last_name, name, linkedin_url, company, title, source)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const tx = getDb().transaction((items: typeof rows) => {
+      let count = 0;
+      for (const data of items) {
+        let fn = data.first_name || '';
+        let ln = data.last_name || '';
+        let fullName = data.name || '';
+        if (fullName && !fn && !ln) {
+          const parts = fullName.trim().split(/\s+/);
+          fn = parts[0] || '';
+          ln = parts.slice(1).join(' ') || '';
+        } else if (!fullName) {
+          fullName = [fn, ln].filter(Boolean).join(' ');
+        }
+        if (!fn && !ln && !fullName) continue; // skip empty rows
+        insert.run(userId, fn, ln, fullName, data.linkedin_url || '', data.company || '', data.title || '', data.source || 'import');
+        count++;
+      }
+      return count;
+    });
+    return tx(rows);
+  },
+  update: (id: number, userId: number, data: Record<string, any>) => {
+    // If first/last name changed, update full name too
+    if ((data.first_name !== undefined || data.last_name !== undefined) && data.name === undefined) {
+      const existing = getDb().prepare('SELECT first_name, last_name FROM contacts WHERE id = ? AND user_id = ?').get(id, userId) as any;
+      if (existing) {
+        const fn = data.first_name !== undefined ? data.first_name : existing.first_name;
+        const ln = data.last_name !== undefined ? data.last_name : existing.last_name;
+        data.name = [fn, ln].filter(Boolean).join(' ');
+      }
+    }
+    const fields = Object.entries(data).filter(([_, v]) => v !== undefined);
+    if (fields.length === 0) return;
+    const setClause = fields.map(([k]) => `${k} = ?`).join(', ');
+    const values = fields.map(([_, v]) => v);
+    return getDb().prepare(`UPDATE contacts SET ${setClause} WHERE id = ? AND user_id = ?`).run(...values, id, userId);
   },
   updateStatus: (id: number, status: string, userId: number) => {
     return getDb().prepare('UPDATE contacts SET status = ? WHERE id = ? AND user_id = ?').run(status, id, userId);

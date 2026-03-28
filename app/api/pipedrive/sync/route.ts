@@ -32,6 +32,8 @@ export async function POST(req: NextRequest) {
 
       if (!existing && person.name) {
         contacts.create(userId, {
+          first_name: person.first_name || '',
+          last_name: person.last_name || '',
           name: person.name,
           company: person.org_name || '',
           title: person.job_title || '',

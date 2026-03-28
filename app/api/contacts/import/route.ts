@@ -1,0 +1,83 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getUserFromRequest } from '@/lib/api-auth';
+import { contacts } from '@/lib/db';
+
+// Known contact fields and common CSV header aliases
+const FIELD_ALIASES: Record<string, string[]> = {
+  first_name: ['first_name', 'firstname', 'first name', 'first', 'fname', 'given name'],
+  last_name: ['last_name', 'lastname', 'last name', 'last', 'lname', 'surname', 'family name'],
+  name: ['name', 'full name', 'fullname', 'full_name', 'contact name', 'contact'],
+  linkedin_url: ['linkedin_url', 'linkedin url', 'linkedin', 'linkedin profile', 'profile url', 'profile_url', 'linkedin link'],
+  company: ['company', 'company name', 'organization', 'org', 'employer', 'company_name'],
+  title: ['title', 'job title', 'job_title', 'position', 'role', 'job role'],
+};
+
+const VALID_FIELDS = Object.keys(FIELD_ALIASES);
+
+function normalizeHeader(header: string): string | null {
+  const h = header.trim().toLowerCase().replace(/[_\-]/g, ' ').replace(/\s+/g, ' ');
+  for (const [field, aliases] of Object.entries(FIELD_ALIASES)) {
+    if (aliases.includes(h)) return field;
+  }
+  return null;
+}
+
+// POST: Preview/validate headers for CSV or Google Sheets data
+// Body: { headers: string[] } -> returns suggested mapping
+// Or: { rows: Array<Record<string, string>>, mapping: Record<string, string> } -> imports data
+export async function POST(req: NextRequest) {
+  try {
+    const { userId } = getUserFromRequest(req);
+    const body = await req.json();
+
+    // Step 1: Header validation - return suggested mapping
+    if (body.headers && !body.rows) {
+      const headers = body.headers as string[];
+      const mapping: Record<string, string | null> = {};
+      const suggestions: Record<string, string | null> = {};
+
+      for (const header of headers) {
+        const match = normalizeHeader(header);
+        suggestions[header] = match;
+      }
+
+      return NextResponse.json({
+        headers,
+        suggestions,
+        validFields: VALID_FIELDS,
+        fieldLabels: {
+          first_name: 'First Name',
+          last_name: 'Last Name',
+          name: 'Full Name',
+          linkedin_url: 'LinkedIn URL',
+          company: 'Company',
+          title: 'Title',
+        },
+      });
+    }
+
+    // Step 2: Import with confirmed mapping
+    if (body.rows && body.mapping) {
+      const rows = body.rows as Array<Record<string, string>>;
+      const mapping = body.mapping as Record<string, string>; // csv_header -> our_field
+
+      const mapped = rows.map((row) => {
+        const contact: Record<string, string> = {};
+        for (const [csvHeader, ourField] of Object.entries(mapping)) {
+          if (ourField && VALID_FIELDS.includes(ourField)) {
+            contact[ourField] = row[csvHeader] || '';
+          }
+        }
+        return contact;
+      }).filter((c) => c.first_name || c.last_name || c.name); // skip empty
+
+      const count = contacts.bulkCreate(userId, mapped);
+
+      return NextResponse.json({ imported: count, total: rows.length });
+    }
+
+    return NextResponse.json({ error: 'Invalid request. Send { headers } or { rows, mapping }' }, { status: 400 });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}

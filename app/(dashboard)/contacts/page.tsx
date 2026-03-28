@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
   Dialog,
@@ -11,10 +10,12 @@ import {
   DialogTrigger
 } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Trash2, Upload, ExternalLink, Search, Users } from 'lucide-react';
+import { Plus, Trash2, Upload, ExternalLink, Search, Users, FileSpreadsheet, Link2, CheckCircle2, AlertCircle, ArrowRight } from 'lucide-react';
 
 interface Contact {
   id: number;
+  first_name: string;
+  last_name: string;
   name: string;
   linkedin_url: string;
   company: string;
@@ -30,12 +31,32 @@ const statusConfig: Record<string, { label: string; dot: string; bg: string }> =
   replied: { label: 'Replied', dot: 'bg-emerald-400', bg: 'bg-emerald-500/10 text-emerald-400' },
 };
 
+type ImportStep = 'choose' | 'csv-upload' | 'sheets-url' | 'mapping' | 'importing' | 'done';
+
+interface ImportState {
+  step: ImportStep;
+  headers: string[];
+  rows: any[];
+  mapping: Record<string, string>;
+  suggestions: Record<string, string | null>;
+  fieldLabels: Record<string, string>;
+  validFields: string[];
+  result: { imported: number; total: number } | null;
+  error: string;
+}
+
 export default function ContactsPage() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [newContact, setNewContact] = useState({ name: '', linkedin_url: '', company: '', title: '' });
+  const [newContact, setNewContact] = useState({ first_name: '', last_name: '', linkedin_url: '', company: '', title: '' });
   const [importing, setImporting] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [importState, setImportState] = useState<ImportState>({
+    step: 'choose', headers: [], rows: [], mapping: {}, suggestions: {},
+    fieldLabels: {}, validFields: [], result: null, error: '',
+  });
+  const [sheetsUrl, setSheetsUrl] = useState('');
 
   useEffect(() => { fetchContacts(); }, []);
 
@@ -47,13 +68,13 @@ export default function ContactsPage() {
   };
 
   const addContact = async () => {
-    if (!newContact.name) return;
+    if (!newContact.first_name && !newContact.last_name) return;
     await fetch('/api/contacts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newContact),
     });
-    setNewContact({ name: '', linkedin_url: '', company: '', title: '' });
+    setNewContact({ first_name: '', last_name: '', linkedin_url: '', company: '', title: '' });
     fetchContacts();
   };
 
@@ -77,14 +98,124 @@ export default function ContactsPage() {
     try {
       const res = await fetch('/api/pipedrive/sync', { method: 'POST' });
       const data = await res.json();
-      alert(`Imported ${data.imported} contacts from Pipedrive`);
+      if (data.error) alert(data.error);
+      else alert(`Imported ${data.imported} contacts from Pipedrive`);
       fetchContacts();
     } finally { setImporting(false); }
   };
 
+  // CSV file handling
+  const handleCsvFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const text = ev.target?.result as string;
+      const lines = text.split(/\r?\n/).filter(l => l.trim());
+      if (lines.length < 2) {
+        setImportState(s => ({ ...s, error: 'CSV file is empty or has no data rows' }));
+        return;
+      }
+      const headers = parseCsvLine(lines[0]);
+      const rows = lines.slice(1).map(line => {
+        const values = parseCsvLine(line);
+        const row: Record<string, string> = {};
+        headers.forEach((h, i) => { row[h] = values[i] || ''; });
+        return row;
+      });
+      await validateHeaders(headers, rows);
+    };
+    reader.readAsText(file);
+  };
+
+  // Google Sheets handling
+  const handleSheetsImport = async () => {
+    if (!sheetsUrl) return;
+    setImportState(s => ({ ...s, error: '' }));
+    try {
+      const res = await fetch('/api/contacts/import/sheets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: sheetsUrl }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        setImportState(s => ({ ...s, error: data.error }));
+        return;
+      }
+      await validateHeaders(data.headers, data.rows);
+    } catch {
+      setImportState(s => ({ ...s, error: 'Failed to fetch sheet' }));
+    }
+  };
+
+  // Validate headers with the API
+  const validateHeaders = async (headers: string[], rows: any[]) => {
+    const res = await fetch('/api/contacts/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ headers }),
+    });
+    const data = await res.json();
+    // Auto-fill mapping from suggestions
+    const mapping: Record<string, string> = {};
+    for (const [header, suggested] of Object.entries(data.suggestions)) {
+      if (suggested) mapping[header] = suggested as string;
+    }
+    setImportState(s => ({
+      ...s, step: 'mapping', headers, rows,
+      mapping, suggestions: data.suggestions,
+      fieldLabels: data.fieldLabels, validFields: data.validFields, error: '',
+    }));
+  };
+
+  // Execute import with confirmed mapping
+  const executeImport = async () => {
+    setImportState(s => ({ ...s, step: 'importing' }));
+    try {
+      const res = await fetch('/api/contacts/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows: importState.rows, mapping: importState.mapping }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        setImportState(s => ({ ...s, step: 'mapping', error: data.error }));
+      } else {
+        setImportState(s => ({ ...s, step: 'done', result: data }));
+        fetchContacts();
+      }
+    } catch {
+      setImportState(s => ({ ...s, step: 'mapping', error: 'Import failed' }));
+    }
+  };
+
+  const resetImport = () => {
+    setImportState({
+      step: 'choose', headers: [], rows: [], mapping: {}, suggestions: {},
+      fieldLabels: {}, validFields: [], result: null, error: '',
+    });
+    setSheetsUrl('');
+  };
+
   const filtered = contacts.filter(c =>
-    !search || c.name.toLowerCase().includes(search.toLowerCase()) ||
+    !search ||
+    c.name.toLowerCase().includes(search.toLowerCase()) ||
+    c.first_name?.toLowerCase().includes(search.toLowerCase()) ||
+    c.last_name?.toLowerCase().includes(search.toLowerCase()) ||
     c.company.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const displayName = (c: Contact) => {
+    if (c.first_name || c.last_name) return [c.first_name, c.last_name].filter(Boolean).join(' ');
+    return c.name;
+  };
+
+  const mappedFieldCount = Object.values(importState.mapping).filter(Boolean).length;
+  const hasNameMapping = importState.mapping && (
+    Object.values(importState.mapping).includes('first_name') ||
+    Object.values(importState.mapping).includes('last_name') ||
+    Object.values(importState.mapping).includes('name')
   );
 
   return (
@@ -97,12 +228,11 @@ export default function ContactsPage() {
         </div>
         <div className="flex gap-2">
           <button
-            onClick={importFromPipedrive}
-            disabled={importing}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-white hover:border-border/80 hover:bg-secondary/50 transition-all disabled:opacity-40"
+            onClick={() => { resetImport(); setShowImport(true); }}
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-white hover:border-border/80 hover:bg-secondary/50 transition-all"
           >
             <Upload size={15} />
-            {importing ? 'Importing...' : 'Pipedrive'}
+            Import
           </button>
           <Dialog>
             <DialogTrigger>
@@ -116,7 +246,10 @@ export default function ContactsPage() {
                 <DialogTitle className="text-lg font-semibold">Add Contact</DialogTitle>
               </DialogHeader>
               <div className="space-y-3 mt-2">
-                <Input placeholder="Full name" value={newContact.name} onChange={(e) => setNewContact({ ...newContact, name: e.target.value })} className="bg-background/50 border-border h-10" />
+                <div className="grid grid-cols-2 gap-3">
+                  <Input placeholder="First name" value={newContact.first_name} onChange={(e) => setNewContact({ ...newContact, first_name: e.target.value })} className="bg-background/50 border-border h-10" />
+                  <Input placeholder="Last name" value={newContact.last_name} onChange={(e) => setNewContact({ ...newContact, last_name: e.target.value })} className="bg-background/50 border-border h-10" />
+                </div>
                 <Input placeholder="LinkedIn URL" value={newContact.linkedin_url} onChange={(e) => setNewContact({ ...newContact, linkedin_url: e.target.value })} className="bg-background/50 border-border h-10" />
                 <Input placeholder="Company" value={newContact.company} onChange={(e) => setNewContact({ ...newContact, company: e.target.value })} className="bg-background/50 border-border h-10" />
                 <Input placeholder="Title" value={newContact.title} onChange={(e) => setNewContact({ ...newContact, title: e.target.value })} className="bg-background/50 border-border h-10" />
@@ -158,11 +291,11 @@ export default function ContactsPage() {
               <div key={contact.id} className="glass glass-hover rounded-xl p-4 flex items-center justify-between">
                 <div className="flex items-center gap-4 min-w-0">
                   <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500/15 to-indigo-500/15 border border-blue-500/10 flex items-center justify-center text-xs font-semibold text-blue-300 shrink-0">
-                    {contact.name.charAt(0)}
+                    {(contact.first_name || contact.name || '?').charAt(0)}
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-white truncate">{contact.name}</p>
+                      <p className="text-sm font-medium text-white truncate">{displayName(contact)}</p>
                       {contact.linkedin_url && (
                         <a href={contact.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 shrink-0">
                           <ExternalLink size={12} />
@@ -202,6 +335,209 @@ export default function ContactsPage() {
           })}
         </div>
       )}
+
+      {/* Import Dialog */}
+      <Dialog open={showImport} onOpenChange={(open) => { if (!open) { setShowImport(false); resetImport(); } }}>
+        <DialogContent className="glass border-border/50 text-white sm:rounded-2xl sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold">
+              {importState.step === 'choose' && 'Import Contacts'}
+              {importState.step === 'csv-upload' && 'Upload CSV'}
+              {importState.step === 'sheets-url' && 'Google Sheets'}
+              {importState.step === 'mapping' && 'Map Columns'}
+              {importState.step === 'importing' && 'Importing...'}
+              {importState.step === 'done' && 'Import Complete'}
+            </DialogTitle>
+          </DialogHeader>
+
+          {importState.error && (
+            <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-red-500/10 border border-red-500/20">
+              <AlertCircle size={14} className="text-red-400 shrink-0" />
+              <p className="text-red-400 text-sm">{importState.error}</p>
+            </div>
+          )}
+
+          {/* Step: Choose source */}
+          {importState.step === 'choose' && (
+            <div className="space-y-3 mt-2">
+              <button
+                onClick={() => setImportState(s => ({ ...s, step: 'csv-upload' }))}
+                className="w-full flex items-center gap-4 p-4 rounded-xl bg-secondary/50 border border-border hover:bg-secondary hover:border-border/80 transition-all text-left"
+              >
+                <div className="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/15 flex items-center justify-center shrink-0">
+                  <FileSpreadsheet size={18} className="text-emerald-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-white">CSV File</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Upload a .csv file from your computer</p>
+                </div>
+              </button>
+              <button
+                onClick={() => setImportState(s => ({ ...s, step: 'sheets-url' }))}
+                className="w-full flex items-center gap-4 p-4 rounded-xl bg-secondary/50 border border-border hover:bg-secondary hover:border-border/80 transition-all text-left"
+              >
+                <div className="w-10 h-10 rounded-lg bg-blue-500/10 border border-blue-500/15 flex items-center justify-center shrink-0">
+                  <Link2 size={18} className="text-blue-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-white">Google Sheets</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Paste a public Google Sheets link</p>
+                </div>
+              </button>
+              <button
+                onClick={importFromPipedrive}
+                disabled={importing}
+                className="w-full flex items-center gap-4 p-4 rounded-xl bg-secondary/50 border border-border hover:bg-secondary hover:border-border/80 transition-all text-left disabled:opacity-50"
+              >
+                <div className="w-10 h-10 rounded-lg bg-violet-500/10 border border-violet-500/15 flex items-center justify-center shrink-0">
+                  <Upload size={18} className="text-violet-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-white">{importing ? 'Importing...' : 'Pipedrive'}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Sync contacts from your Pipedrive CRM</p>
+                </div>
+              </button>
+            </div>
+          )}
+
+          {/* Step: CSV upload */}
+          {importState.step === 'csv-upload' && (
+            <div className="space-y-4 mt-2">
+              <label className="block w-full cursor-pointer">
+                <div className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-blue-500/30 transition-all">
+                  <FileSpreadsheet className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-sm text-white font-medium">Click to select a CSV file</p>
+                  <p className="text-xs text-muted-foreground mt-1">or drag and drop</p>
+                </div>
+                <input type="file" accept=".csv" onChange={handleCsvFile} className="hidden" />
+              </label>
+              <button onClick={() => setImportState(s => ({ ...s, step: 'choose' }))} className="text-sm text-muted-foreground hover:text-white transition-colors">
+                Back
+              </button>
+            </div>
+          )}
+
+          {/* Step: Google Sheets URL */}
+          {importState.step === 'sheets-url' && (
+            <div className="space-y-4 mt-2">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Google Sheets URL</label>
+                <Input
+                  placeholder="https://docs.google.com/spreadsheets/d/..."
+                  value={sheetsUrl}
+                  onChange={(e) => setSheetsUrl(e.target.value)}
+                  className="bg-background/50 border-border h-10"
+                />
+                <p className="text-xs text-muted-foreground mt-1.5">The sheet must be publicly accessible (File &gt; Share &gt; Anyone with the link)</p>
+              </div>
+              <button
+                onClick={handleSheetsImport}
+                disabled={!sheetsUrl}
+                className="w-full h-10 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 disabled:opacity-40 transition-all"
+              >
+                Fetch Sheet
+              </button>
+              <button onClick={() => setImportState(s => ({ ...s, step: 'choose', error: '' }))} className="text-sm text-muted-foreground hover:text-white transition-colors">
+                Back
+              </button>
+            </div>
+          )}
+
+          {/* Step: Column mapping */}
+          {importState.step === 'mapping' && (
+            <div className="space-y-4 mt-2">
+              <p className="text-sm text-muted-foreground">
+                Found <span className="text-white font-medium">{importState.rows.length}</span> rows and <span className="text-white font-medium">{importState.headers.length}</span> columns. Map your columns to contact fields:
+              </p>
+              <div className="space-y-2 max-h-[300px] overflow-auto">
+                {importState.headers.map((header) => (
+                  <div key={header} className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50 border border-border/50">
+                    <span className="text-sm text-white font-medium w-40 truncate shrink-0" title={header}>{header}</span>
+                    <ArrowRight size={14} className="text-muted-foreground shrink-0" />
+                    <select
+                      value={importState.mapping[header] || ''}
+                      onChange={(e) => setImportState(s => ({
+                        ...s, mapping: { ...s.mapping, [header]: e.target.value }
+                      }))}
+                      className="flex-1 h-8 bg-background/50 text-white text-sm rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50"
+                    >
+                      <option value="">Skip this column</option>
+                      {importState.validFields.map(f => (
+                        <option key={f} value={f}>{importState.fieldLabels[f] || f}</option>
+                      ))}
+                    </select>
+                    {importState.suggestions[header] && importState.mapping[header] === importState.suggestions[header] && (
+                      <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
+                    )}
+                  </div>
+                ))}
+              </div>
+              {!hasNameMapping && (
+                <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                  <AlertCircle size={14} className="text-amber-400 shrink-0" />
+                  <p className="text-amber-400 text-sm">Map at least a First Name, Last Name, or Full Name column</p>
+                </div>
+              )}
+              <div className="flex gap-3">
+                <button
+                  onClick={executeImport}
+                  disabled={!hasNameMapping}
+                  className="flex-1 h-10 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 disabled:opacity-40 transition-all"
+                >
+                  Import {importState.rows.length} Contacts ({mappedFieldCount} fields mapped)
+                </button>
+                <button onClick={resetImport} className="px-4 h-10 rounded-lg text-sm text-muted-foreground hover:text-white hover:bg-secondary transition-all">
+                  Back
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Step: Importing */}
+          {importState.step === 'importing' && (
+            <div className="py-8 text-center">
+              <div className="w-8 h-8 border-2 border-blue-400/30 border-t-blue-400 rounded-full animate-spin mx-auto mb-3" />
+              <p className="text-sm text-muted-foreground">Importing contacts...</p>
+            </div>
+          )}
+
+          {/* Step: Done */}
+          {importState.step === 'done' && importState.result && (
+            <div className="py-6 text-center">
+              <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-3" />
+              <p className="text-white font-medium">
+                Imported {importState.result.imported} of {importState.result.total} contacts
+              </p>
+              <button
+                onClick={() => { setShowImport(false); resetImport(); }}
+                className="mt-4 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 transition-all"
+              >
+                Done
+              </button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
+}
+
+function parseCsvLine(line: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (inQuotes) {
+      if (char === '"' && line[i + 1] === '"') { current += '"'; i++; }
+      else if (char === '"') { inQuotes = false; }
+      else { current += char; }
+    } else {
+      if (char === '"') { inQuotes = true; }
+      else if (char === ',') { result.push(current.trim()); current = ''; }
+      else { current += char; }
+    }
+  }
+  result.push(current.trim());
+  return result;
 }

@@ -58,21 +58,48 @@ export default function TemplatesPage() {
     fetchTemplates();
   };
 
+  const availableVars = [
+    { key: 'firstName', label: 'First Name', desc: 'Contact first name' },
+    { key: 'lastName', label: 'Last Name', desc: 'Contact last name' },
+    { key: 'fullName', label: 'Full Name', desc: 'First + last name' },
+    { key: 'company', label: 'Company', desc: 'Company name' },
+    { key: 'title', label: 'Title', desc: 'Job title' },
+  ];
+
+  const insertVariable = (template: any, onChange: (t: any) => void, varKey: string) => {
+    const tag = `{{${varKey}}}`;
+    onChange({ ...template, body: (template.body || '') + tag });
+  };
+
   const TemplateForm = ({ template, onChange }: { template: any; onChange: (t: any) => void }) => (
     <div className="space-y-3 mt-2">
       <Input placeholder="Template name" value={template.name} onChange={(e) => onChange({ ...template, name: e.target.value })} className="bg-background/50 border-border h-10" />
       <div>
-        <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Variables</label>
-        <Input placeholder="firstName, company, title" value={template.variables} onChange={(e) => onChange({ ...template, variables: e.target.value })} className="bg-background/50 border-border h-9 text-sm" />
+        <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Insert Variable</label>
+        <div className="flex flex-wrap gap-1.5">
+          {availableVars.map(v => (
+            <button
+              key={v.key}
+              type="button"
+              onClick={() => insertVariable(template, onChange, v.key)}
+              className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-md bg-violet-500/10 text-violet-400 border border-violet-500/15 hover:bg-violet-500/20 transition-colors cursor-pointer"
+              title={v.desc}
+            >
+              <Tag size={9} />
+              {v.label}
+            </button>
+          ))}
+        </div>
       </div>
       <div>
         <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Message Body</label>
         <Textarea
-          placeholder="Use {{variableName}} for personalization..."
+          placeholder="Hi {{firstName}}, I'd love to connect..."
           value={template.body}
           onChange={(e) => onChange({ ...template, body: e.target.value })}
           className="bg-background/50 border-border min-h-[140px] text-sm leading-relaxed"
         />
+        <p className="text-[11px] text-muted-foreground mt-1">Use {'{{variableName}}'} syntax for personalization. Variables are replaced with contact data when messages are sent.</p>
       </div>
     </div>
   );
