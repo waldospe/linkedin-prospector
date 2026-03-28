@@ -198,6 +198,9 @@ function initDb() {
     )
   `);
 
+  // Fix any contacts still stuck on old "pending" status
+  db.exec(`UPDATE contacts SET status = 'new' WHERE status = 'pending'`);
+
   // Seed data
   seedData();
 }
@@ -377,14 +380,14 @@ export const contacts = {
       fullName = [fn, ln].filter(Boolean).join(' ');
     }
     return getDb().prepare(`
-      INSERT INTO contacts (user_id, first_name, last_name, name, linkedin_url, company, title, source, pipedrive_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO contacts (user_id, first_name, last_name, name, linkedin_url, company, title, source, pipedrive_id, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'new')
     `).run(userId, fn, ln, fullName, data.linkedin_url || '', data.company || '', data.title || '', data.source || 'manual', data.pipedrive_id || null);
   },
   bulkCreate: (userId: number, rows: Array<{ first_name?: string; last_name?: string; name?: string; linkedin_url?: string; company?: string; title?: string; source?: string }>) => {
     const insert = getDb().prepare(`
-      INSERT INTO contacts (user_id, first_name, last_name, name, linkedin_url, company, title, source)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO contacts (user_id, first_name, last_name, name, linkedin_url, company, title, source, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'new')
     `);
     const tx = getDb().transaction((items: typeof rows) => {
       let count = 0;
