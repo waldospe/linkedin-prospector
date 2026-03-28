@@ -3,6 +3,13 @@ import { getUserFromRequest } from '@/lib/api-auth';
 import { globalConfig, users } from '@/lib/db';
 import { normalizeLinkedInUrl } from '@/lib/constants';
 
+// Extract the LinkedIn username slug from a URL
+// https://www.linkedin.com/in/jeffwald/ -> jeffwald
+function extractLinkedInSlug(url: string): string | null {
+  const match = url.match(/linkedin\.com\/in\/([a-zA-Z0-9\-_.]+)/);
+  return match ? match[1] : null;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { userId } = getUserFromRequest(req);
@@ -22,87 +29,61 @@ export async function POST(req: NextRequest) {
     }
 
     const url = normalizeLinkedInUrl(linkedin_url);
+    const slug = extractLinkedInSlug(url);
+
+    if (!slug) {
+      return NextResponse.json({ error: 'Invalid LinkedIn URL. Expected format: linkedin.com/in/username' }, { status: 400 });
+    }
+
     const dsn = cfg.unipile_dsn || 'api21.unipile.com:15135';
-    const baseUrl = `https://${dsn}/api/v1`;
-    const headers = {
-      'X-API-KEY': cfg.unipile_api_key,
-      'Accept': 'application/json',
-    };
 
-    // Try the profile view endpoint first
-    let profile: any = null;
-
-    // Attempt 1: /users/me with linkedin parameter
-    try {
-      const res1 = await fetch(
-        `${baseUrl}/users/?linkedin=${encodeURIComponent(url)}&account_id=${user.unipile_account_id}`,
-        { headers }
-      );
-      console.log('LOOKUP attempt 1 status:', res1.status);
-      if (res1.ok) {
-        profile = await res1.json();
-        console.log('LOOKUP attempt 1 response:', JSON.stringify(profile, null, 2));
-      } else {
-        const errText = await res1.text();
-        console.log('LOOKUP attempt 1 error:', errText);
+    // Unipile API: GET /api/v1/users/{slug}?account_id={id}&linkedin_sections=*
+    const res = await fetch(
+      `https://${dsn}/api/v1/users/${slug}?account_id=${user.unipile_account_id}&linkedin_sections=*`,
+      {
+        headers: {
+          'X-API-KEY': cfg.unipile_api_key,
+          'Accept': 'application/json',
+        },
       }
-    } catch (e: any) {
-      console.log('LOOKUP attempt 1 exception:', e.message);
+    );
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.log('LOOKUP error:', res.status, errText);
+      return NextResponse.json({ error: 'Profile not found. Check the URL and try again.' }, { status: 404 });
     }
 
-    // Attempt 2: /linkedin/profile endpoint
-    if (!profile) {
-      try {
-        const res2 = await fetch(
-          `${baseUrl}/linkedin/profile?linkedin_url=${encodeURIComponent(url)}&account_id=${user.unipile_account_id}`,
-          { headers }
-        );
-        console.log('LOOKUP attempt 2 status:', res2.status);
-        if (res2.ok) {
-          profile = await res2.json();
-          console.log('LOOKUP attempt 2 response:', JSON.stringify(profile, null, 2));
-        } else {
-          const errText = await res2.text();
-          console.log('LOOKUP attempt 2 error:', errText);
-        }
-      } catch (e: any) {
-        console.log('LOOKUP attempt 2 exception:', e.message);
-      }
-    }
+    const profile = await res.json();
+    console.log('LOOKUP profile keys:', Object.keys(profile));
 
-    // Attempt 3: /users/guest with profile URL
-    if (!profile) {
-      try {
-        const res3 = await fetch(
-          `${baseUrl}/users/guest?linkedin_url=${encodeURIComponent(url)}&account_id=${user.unipile_account_id}`,
-          { headers }
-        );
-        console.log('LOOKUP attempt 3 status:', res3.status);
-        if (res3.ok) {
-          profile = await res3.json();
-          console.log('LOOKUP attempt 3 response:', JSON.stringify(profile, null, 2));
-        } else {
-          const errText = await res3.text();
-          console.log('LOOKUP attempt 3 error:', errText);
-        }
-      } catch (e: any) {
-        console.log('LOOKUP attempt 3 exception:', e.message);
-      }
-    }
-
-    if (!profile) {
-      return NextResponse.json({ error: 'Could not retrieve profile from Unipile. The profile may not be accessible.' }, { status: 404 });
-    }
-
-    // Try every possible field name from the response
-    const firstName = profile.first_name || profile.firstName || profile.FirstName || '';
-    const lastName = profile.last_name || profile.lastName || profile.LastName || '';
-    const fullName = profile.name || profile.Name || profile.display_name || profile.displayName
+    // Extract fields
+    const firstName = profile.first_name || profile.firstName || '';
+    const lastName = profile.last_name || profile.lastName || '';
+    const fullName = profile.name || profile.display_name
       || [firstName, lastName].filter(Boolean).join(' ') || '';
-    const title = profile.headline || profile.title || profile.job_title || profile.jobTitle
-      || profile.position || profile.Headline || '';
-    const company = profile.company?.name || profile.company_name || profile.companyName
-      || profile.organization || profile.current_company || profile.Company || '';
+    const headline = profile.headline || profile.title || '';
+
+    // Try to extract company from experience or headline
+    let company = '';
+    if (profile.experience && Array.isArray(profile.experience) && profile.experience.length > 0) {
+      company = profile.experience[0].company_name || profile.experience[0].company || '';
+    }
+    if (!company && profile.company_name) {
+      company = profile.company_name;
+    }
+    if (!company && profile.company?.name) {
+      company = profile.company.name;
+    }
+
+    // Try to extract title from experience or headline
+    let title = '';
+    if (profile.experience && Array.isArray(profile.experience) && profile.experience.length > 0) {
+      title = profile.experience[0].title || '';
+    }
+    if (!title) {
+      title = headline;
+    }
 
     return NextResponse.json({
       first_name: firstName,
