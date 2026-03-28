@@ -18,8 +18,30 @@ export async function POST(req: NextRequest) {
 
     const { profile_url, message } = await req.json();
     const dsn = cfg.unipile_dsn || 'api21.unipile.com:15135';
+    const baseUrl = `https://${dsn}/api/v1`;
 
-    const response = await fetch(`https://${dsn}/api/v1/users/invitation`, {
+    // First look up the profile to get provider_id
+    const slugMatch = profile_url?.match(/linkedin\.com\/in\/([a-zA-Z0-9\-_.]+)/);
+    if (!slugMatch) {
+      return NextResponse.json({ error: 'Invalid LinkedIn URL' }, { status: 400 });
+    }
+
+    const profileRes = await fetch(
+      `${baseUrl}/users/${slugMatch[1]}?account_id=${user.unipile_account_id}`,
+      {
+        headers: { 'X-API-KEY': cfg.unipile_api_key, 'Accept': 'application/json' },
+      }
+    );
+
+    if (!profileRes.ok) {
+      return NextResponse.json({ error: 'Failed to look up profile' }, { status: 400 });
+    }
+
+    const profile = await profileRes.json();
+    const providerId = profile.provider_id || profile.id;
+
+    // Send invitation
+    const response = await fetch(`${baseUrl}/users/invite`, {
       method: 'POST',
       headers: {
         'X-API-KEY': cfg.unipile_api_key,
@@ -28,7 +50,7 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         account_id: user.unipile_account_id,
-        profile_url,
+        provider_id: providerId,
         message,
       }),
     });

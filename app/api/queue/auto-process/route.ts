@@ -75,18 +75,39 @@ export async function POST(req: NextRequest) {
             'Accept': 'application/json',
           };
 
-          if (item.action_type === 'connection') {
-            if (!item.linkedin_url) {
-              queue.updateStatus(item.id, 'failed', user.id, 'No LinkedIn URL');
-              continue;
-            }
+          // Look up LinkedIn profile to get provider_id
+          if (!item.linkedin_url) {
+            queue.updateStatus(item.id, 'failed', user.id, 'No LinkedIn URL');
+            continue;
+          }
+          const slugMatch = item.linkedin_url.match(/linkedin\.com\/in\/([a-zA-Z0-9\-_.]+)/);
+          if (!slugMatch) {
+            queue.updateStatus(item.id, 'failed', user.id, 'Invalid LinkedIn URL format');
+            continue;
+          }
 
-            const res = await fetch(`${baseUrl}/users/invitation`, {
+          const profileRes = await fetch(
+            `${baseUrl}/users/${slugMatch[1]}?account_id=${user.unipile_account_id}`,
+            { headers: { 'X-API-KEY': cfg.unipile_api_key, 'Accept': 'application/json' } }
+          );
+
+          if (!profileRes.ok) {
+            const errText = await profileRes.text();
+            queue.updateStatus(item.id, 'failed', user.id, `Profile lookup failed: ${errText.slice(0, 150)}`);
+            errors.push(`${item.contact_name}: profile lookup failed`);
+            continue;
+          }
+
+          const profile = await profileRes.json();
+          const providerId = profile.provider_id || profile.id;
+
+          if (item.action_type === 'connection') {
+            const res = await fetch(`${baseUrl}/users/invite`, {
               method: 'POST',
               headers: apiHeaders,
               body: JSON.stringify({
                 account_id: user.unipile_account_id,
-                profile_url: item.linkedin_url,
+                provider_id: providerId,
                 message: messageText || undefined,
               }),
             });
@@ -103,37 +124,12 @@ export async function POST(req: NextRequest) {
             stats.increment('connections_sent', user.id);
 
           } else if (item.action_type === 'message') {
-            if (!item.linkedin_url) {
-              queue.updateStatus(item.id, 'failed', user.id, 'No LinkedIn URL');
-              continue;
-            }
-
-            // Extract slug from LinkedIn URL for profile lookup
-            const slugMatch = item.linkedin_url.match(/linkedin\.com\/in\/([a-zA-Z0-9\-_.]+)/);
-            if (!slugMatch) {
-              queue.updateStatus(item.id, 'failed', user.id, 'Invalid LinkedIn URL format');
-              continue;
-            }
-
-            const profileRes = await fetch(
-              `${baseUrl}/users/${slugMatch[1]}?account_id=${user.unipile_account_id}`,
-              { headers: { 'X-API-KEY': cfg.unipile_api_key, 'Accept': 'application/json' } }
-            );
-
-            if (!profileRes.ok) {
-              queue.updateStatus(item.id, 'failed', user.id, 'Profile lookup failed');
-              errors.push(`${item.contact_name}: profile lookup failed`);
-              continue;
-            }
-
-            const profile = await profileRes.json();
-
             const msgRes = await fetch(`${baseUrl}/chats`, {
               method: 'POST',
               headers: apiHeaders,
               body: JSON.stringify({
                 account_id: user.unipile_account_id,
-                attendee_id: profile.id,
+                attendee_id: providerId,
                 text: messageText,
               }),
             });
