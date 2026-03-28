@@ -49,7 +49,8 @@ export default function ContactsPage() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [newContact, setNewContact] = useState({ first_name: '', last_name: '', linkedin_url: '', company: '', title: '' });
+  const [newContact, setNewContact] = useState({ first_name: '', last_name: '', linkedin_url: '', company: '', title: '', sequence_id: '' });
+  const [sequencesList, setSequencesList] = useState<Array<{ id: number; name: string }>>([]);
   const [importing, setImporting] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [importState, setImportState] = useState<ImportState>({
@@ -58,7 +59,12 @@ export default function ContactsPage() {
   });
   const [sheetsUrl, setSheetsUrl] = useState('');
 
-  useEffect(() => { fetchContacts(); }, []);
+  useEffect(() => {
+    fetchContacts();
+    fetch('/api/sequences').then(r => r.json()).then(data => {
+      if (Array.isArray(data)) setSequencesList(data.filter((s: any) => s.active));
+    });
+  }, []);
 
   const fetchContacts = async () => {
     try {
@@ -69,12 +75,24 @@ export default function ContactsPage() {
 
   const addContact = async () => {
     if (!newContact.first_name && !newContact.last_name) return;
+    const payload: any = { ...newContact };
+    if (payload.sequence_id) payload.sequence_id = parseInt(payload.sequence_id);
+    else delete payload.sequence_id;
     await fetch('/api/contacts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newContact),
+      body: JSON.stringify(payload),
     });
-    setNewContact({ first_name: '', last_name: '', linkedin_url: '', company: '', title: '' });
+    setNewContact({ first_name: '', last_name: '', linkedin_url: '', company: '', title: '', sequence_id: '' });
+    fetchContacts();
+  };
+
+  const assignSequence = async (contactId: number, sequenceId: number) => {
+    await fetch(`/api/contacts/${contactId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sequence_id: sequenceId }),
+    });
     fetchContacts();
   };
 
@@ -253,6 +271,21 @@ export default function ContactsPage() {
                 <Input placeholder="LinkedIn URL" value={newContact.linkedin_url} onChange={(e) => setNewContact({ ...newContact, linkedin_url: e.target.value })} className="bg-background/50 border-border h-10" />
                 <Input placeholder="Company" value={newContact.company} onChange={(e) => setNewContact({ ...newContact, company: e.target.value })} className="bg-background/50 border-border h-10" />
                 <Input placeholder="Title" value={newContact.title} onChange={(e) => setNewContact({ ...newContact, title: e.target.value })} className="bg-background/50 border-border h-10" />
+                {sequencesList.length > 0 && (
+                  <div>
+                    <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Add to Sequence (optional)</label>
+                    <select
+                      value={newContact.sequence_id}
+                      onChange={(e) => setNewContact({ ...newContact, sequence_id: e.target.value })}
+                      className="w-full h-10 bg-background/50 text-white text-sm rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50"
+                    >
+                      <option value="">None</option>
+                      {sequencesList.map(s => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <button onClick={addContact} className="w-full h-10 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 transition-all">
                   Add Contact
                 </button>
@@ -307,11 +340,23 @@ export default function ContactsPage() {
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 shrink-0">
+                <div className="flex items-center gap-2 shrink-0">
                   <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md ${cfg.bg}`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
                     {cfg.label}
                   </span>
+                  {contact.status === 'new' && sequencesList.length > 0 && (
+                    <select
+                      defaultValue=""
+                      onChange={(e) => { if (e.target.value) assignSequence(contact.id, parseInt(e.target.value)); }}
+                      className="h-8 bg-secondary/50 text-white text-xs rounded-lg px-2 border border-border focus:outline-none focus:border-blue-500/50 cursor-pointer"
+                    >
+                      <option value="">+ Sequence</option>
+                      {sequencesList.map(s => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                  )}
                   <Select value={contact.status} onValueChange={(v) => { if (v) updateStatus(contact.id, v); }}>
                     <SelectTrigger className="w-36 h-8 bg-secondary/50 border-border text-xs">
                       <SelectValue />
