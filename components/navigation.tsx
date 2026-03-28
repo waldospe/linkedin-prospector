@@ -40,12 +40,12 @@ export default function Navigation() {
 
   if (loading || !currentUser) {
     return (
-      <nav className="w-[260px] min-h-screen border-r border-border/50 bg-card/30 p-5">
-        <div className="animate-pulse space-y-6">
-          <div className="h-6 w-32 bg-secondary rounded-md" />
-          <div className="space-y-2">
+      <nav className="w-[240px] min-h-screen bg-[hsl(228,14%,9%)] border-r border-[hsl(228,11%,15%)] p-4">
+        <div className="animate-pulse space-y-3 mt-4">
+          <div className="h-6 w-28 bg-[hsl(228,13%,14%)] rounded-md" />
+          <div className="mt-8 space-y-1.5">
             {[...Array(7)].map((_, i) => (
-              <div key={i} className="h-9 bg-secondary rounded-lg" />
+              <div key={i} className="h-9 bg-[hsl(228,13%,14%)] rounded-lg" />
             ))}
           </div>
         </div>
@@ -54,20 +54,19 @@ export default function Navigation() {
   }
 
   return (
-    <nav className="w-[260px] min-h-screen border-r border-border/50 bg-card/30 p-5 flex flex-col">
+    <nav className="w-[240px] min-h-screen bg-[hsl(228,14%,9%)] border-r border-[hsl(228,11%,15%)] p-4 flex flex-col">
       {/* Logo */}
-      <div className="flex items-center gap-2.5 mb-8 px-1">
-        <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
-          <Zap className="w-4 h-4 text-blue-400" />
+      <div className="flex items-center gap-2.5 mb-8 px-2 pt-1">
+        <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
+          <Zap className="w-4 h-4 text-white" />
         </div>
         <div>
-          <h1 className="text-sm font-semibold text-white leading-none">LinkedIn Prospector</h1>
-          <p className="text-[11px] text-muted-foreground mt-0.5">Campaign Automation</p>
+          <h1 className="text-[13px] font-semibold text-white leading-none tracking-tight">LinkedIn Prospector</h1>
         </div>
       </div>
 
       {/* Nav links */}
-      <div className="flex-1 space-y-0.5">
+      <div className="flex-1 space-y-1">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = pathname === item.href;
@@ -76,10 +75,10 @@ export default function Navigation() {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150",
+                "flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors",
                 isActive
-                  ? "bg-blue-500/10 text-blue-400 border border-blue-500/15"
-                  : "text-muted-foreground hover:text-white hover:bg-secondary/80 border border-transparent"
+                  ? "bg-blue-600/15 text-blue-400"
+                  : "text-[hsl(220,10%,60%)] hover:text-white hover:bg-[hsl(228,13%,14%)]"
               )}
             >
               <Icon size={16} strokeWidth={isActive ? 2 : 1.5} />
@@ -90,14 +89,14 @@ export default function Navigation() {
 
         {isAdmin && (
           <>
-            <div className="h-px bg-border/50 my-3" />
+            <div className="h-px bg-[hsl(228,11%,15%)] my-3" />
             <Link
               href="/users"
               className={cn(
-                "flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-150",
+                "flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors",
                 pathname === '/users'
-                  ? "bg-blue-500/10 text-blue-400 border border-blue-500/15"
-                  : "text-muted-foreground hover:text-white hover:bg-secondary/80 border border-transparent"
+                  ? "bg-blue-600/15 text-blue-400"
+                  : "text-[hsl(220,10%,60%)] hover:text-white hover:bg-[hsl(228,13%,14%)]"
               )}
             >
               <UserCog size={16} strokeWidth={pathname === '/users' ? 2 : 1.5} />
@@ -108,21 +107,21 @@ export default function Navigation() {
       </div>
 
       {/* User footer */}
-      <div className="border-t border-border/50 pt-4 mt-4">
-        <div className="flex items-center gap-3 px-1 mb-3">
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500/20 to-indigo-500/20 border border-blue-500/20 flex items-center justify-center text-xs font-semibold text-blue-300">
+      <div className="border-t border-[hsl(228,11%,15%)] pt-3 mt-3">
+        <div className="flex items-center gap-2.5 px-2 mb-2">
+          <div className="w-7 h-7 rounded-full bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-[11px] font-semibold text-blue-400 shrink-0">
             {currentUser.name.charAt(0)}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-white truncate">{currentUser.name}</p>
-            <p className="text-[11px] text-muted-foreground truncate">{currentUser.email}</p>
+            <p className="text-[13px] font-medium text-white truncate leading-tight">{currentUser.name}</p>
+            <p className="text-[11px] text-[hsl(220,10%,45%)] truncate">{currentUser.email}</p>
           </div>
         </div>
         <button
           onClick={handleLogout}
-          className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium text-muted-foreground hover:text-white hover:bg-secondary/80 transition-all duration-150 w-full"
+          className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium text-[hsl(220,10%,50%)] hover:text-white hover:bg-[hsl(228,13%,14%)] transition-colors w-full"
         >
-          <LogOut size={16} strokeWidth={1.5} />
+          <LogOut size={15} strokeWidth={1.5} />
           Sign out
         </button>
       </div>
