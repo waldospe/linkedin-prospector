@@ -1,26 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getUserFromRequest } from '@/lib/api-auth';
 import { queue, contacts, stats } from '@/lib/db';
 
-export async function POST() {
+export async function POST(req: NextRequest) {
   try {
-    const pending = queue.getPending();
+    const { userId } = getUserFromRequest(req);
+    const pending = queue.getPending(userId);
     const processed = [];
 
-    for (const item of pending.slice(0, 5) as any[]) { // Process max 5 at a time
+    for (const item of pending.slice(0, 5) as any[]) {
       // In a real implementation, this would call the Unipile API
-      // For now, we'll just mark as completed
-      
-      queue.updateStatus(item.id, 'completed');
-      
-      // Update contact status
+      queue.updateStatus(item.id, 'completed', userId);
+
       if (item.action_type === 'connection') {
-        contacts.updateStatus(item.contact_id, 'connected');
-        stats.increment('connections_sent');
+        contacts.updateStatus(item.contact_id, 'connected', userId);
+        stats.increment('connections_sent', userId);
       } else if (item.action_type === 'message') {
-        contacts.updateStatus(item.contact_id, 'messaged');
-        stats.increment('messages_sent');
+        contacts.updateStatus(item.contact_id, 'messaged', userId);
+        stats.increment('messages_sent', userId);
       }
-      
+
       processed.push(item.id);
     }
 

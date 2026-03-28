@@ -1,14 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { stats } from '@/lib/db-mem';
-
-function getUserId(req: NextRequest): number | undefined {
-  const userId = req.headers.get('x-user-id');
-  return userId ? parseInt(userId) : 1;
-}
+import { getUserFromRequest } from '@/lib/api-auth';
+import { stats } from '@/lib/db';
 
 export async function GET(req: NextRequest) {
   try {
-    const userId = getUserId(req);
+    const { userId } = getUserFromRequest(req);
     const { searchParams } = new URL(req.url);
     const days = Number(searchParams.get('days')) || 30;
     const daily = stats.getDaily(days, userId);

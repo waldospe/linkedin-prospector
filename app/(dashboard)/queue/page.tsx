@@ -1,10 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { RefreshCw, Clock, CheckCircle2, AlertCircle, Pause, Play } from 'lucide-react';
+import { RefreshCw, Clock, CheckCircle2, AlertCircle, Pause, ListTodo } from 'lucide-react';
 
 interface QueueItem {
   id: number;
@@ -19,25 +16,25 @@ interface QueueItem {
   error: string;
 }
 
+const statusConfig: Record<string, { icon: any; color: string; bg: string; label: string }> = {
+  pending: { icon: Clock, color: 'text-amber-400', bg: 'bg-amber-500/10 text-amber-400 border-amber-500/15', label: 'Pending' },
+  completed: { icon: CheckCircle2, color: 'text-emerald-400', bg: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/15', label: 'Completed' },
+  failed: { icon: AlertCircle, color: 'text-red-400', bg: 'bg-red-500/10 text-red-400 border-red-500/15', label: 'Failed' },
+  paused: { icon: Pause, color: 'text-orange-400', bg: 'bg-orange-500/10 text-orange-400 border-orange-500/15', label: 'Paused' },
+};
+
 export default function QueuePage() {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
 
-  useEffect(() => {
-    fetchQueue();
-  }, []);
+  useEffect(() => { fetchQueue(); }, []);
 
   const fetchQueue = async () => {
     try {
       const res = await fetch('/api/queue');
-      const data = await res.json();
-      setQueue(data);
-    } catch (error) {
-      console.error('Failed to fetch queue:', error);
-    } finally {
-      setLoading(false);
-    }
+      setQueue(await res.json());
+    } finally { setLoading(false); }
   };
 
   const processQueue = async () => {
@@ -45,123 +42,103 @@ export default function QueuePage() {
     try {
       await fetch('/api/queue/process', { method: 'POST' });
       fetchQueue();
-    } catch (error) {
-      console.error('Failed to process queue:', error);
-    } finally {
-      setProcessing(false);
-    }
+    } finally { setProcessing(false); }
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'pending': return <Clock className="w-4 h-4 text-yellow-500" />;
-      case 'completed': return <CheckCircle2 className="w-4 h-4 text-green-500" />;
-      case 'failed': return <AlertCircle className="w-4 h-4 text-red-500" />;
-      case 'paused': return <Pause className="w-4 h-4 text-orange-500" />;
-      default: return <Clock className="w-4 h-4 text-zinc-500" />;
-    }
+  const counts = {
+    pending: queue.filter(q => q.status === 'pending').length,
+    completed: queue.filter(q => q.status === 'completed').length,
+    failed: queue.filter(q => q.status === 'failed').length,
+    total: queue.length,
   };
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'pending': return <Badge variant="outline" className="text-yellow-500">Pending</Badge>;
-      case 'completed': return <Badge variant="outline" className="text-green-500">Completed</Badge>;
-      case 'failed': return <Badge variant="outline" className="text-red-500">Failed</Badge>;
-      case 'paused': return <Badge variant="outline" className="text-orange-500">Paused</Badge>;
-      default: return <Badge variant="outline">{status}</Badge>;
-    }
-  };
+  const summaryCards = [
+    { label: 'Pending', value: counts.pending, color: 'text-amber-400' },
+    { label: 'Completed', value: counts.completed, color: 'text-emerald-400' },
+    { label: 'Failed', value: counts.failed, color: 'text-red-400' },
+    { label: 'Total', value: counts.total, color: 'text-white' },
+  ];
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white">Queue</h1>
-          <p className="text-zinc-400 mt-1">Manage pending outreach actions</p>
+          <h1 className="text-2xl font-semibold text-white tracking-tight">Queue</h1>
+          <p className="text-sm text-muted-foreground mt-1">Pending and completed outreach actions</p>
         </div>
-        <Button 
-          onClick={processQueue} 
-          disabled={processing}
-          className="bg-blue-600 hover:bg-blue-700"
+        <button
+          onClick={processQueue}
+          disabled={processing || counts.pending === 0}
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all glow-sm"
         >
-          <RefreshCw className={`w-4 h-4 mr-2 ${processing ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-4 h-4 ${processing ? 'animate-spin' : ''}`} />
           {processing ? 'Processing...' : 'Process Queue'}
-        </Button>
+        </button>
       </div>
 
+      {/* Summary */}
       <div className="grid grid-cols-4 gap-4">
-        <Card className="bg-zinc-900 border-zinc-800">
-          <CardContent className="p-4">
-            <p className="text-sm text-zinc-400">Pending</p>
-            <p className="text-2xl font-bold text-yellow-500">
-              {queue.filter(q => q.status === 'pending').length}
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="bg-zinc-900 border-zinc-800">
-          <CardContent className="p-4">
-            <p className="text-sm text-zinc-400">Completed Today</p>
-            <p className="text-2xl font-bold text-green-500">
-              {queue.filter(q => q.status === 'completed').length}
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="bg-zinc-900 border-zinc-800">
-          <CardContent className="p-4">
-            <p className="text-sm text-zinc-400">Failed</p>
-            <p className="text-2xl font-bold text-red-500">
-              {queue.filter(q => q.status === 'failed').length}
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="bg-zinc-900 border-zinc-800">
-          <CardContent className="p-4">
-            <p className="text-sm text-zinc-400">Total</p>
-            <p className="text-2xl font-bold text-white">{queue.length}</p>
-          </CardContent>
-        </Card>
+        {summaryCards.map(({ label, value, color }) => (
+          <div key={label} className="glass rounded-xl p-4">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</p>
+            <p className={`text-2xl font-semibold mt-1 tabular-nums ${color}`}>{value}</p>
+          </div>
+        ))}
       </div>
 
-      <Card className="bg-zinc-900 border-zinc-800">
-        <CardHeader>
-          <CardTitle className="text-white">Queue Items</CardTitle>
-        </CardHeader>
-        <CardContent>
+      {/* Queue list */}
+      <div className="glass rounded-xl overflow-hidden">
+        <div className="px-5 py-3 border-b border-border/50">
+          <span className="text-sm font-medium text-white">Queue Items</span>
+        </div>
+        <div className="p-3">
           {loading ? (
-            <p className="text-zinc-500">Loading...</p>
+            <div className="space-y-2 p-2">
+              {[...Array(5)].map((_, i) => <div key={i} className="h-16 bg-secondary rounded-lg animate-pulse" />)}
+            </div>
           ) : queue.length === 0 ? (
-            <p className="text-zinc-500">No items in queue</p>
+            <div className="py-12 text-center">
+              <ListTodo className="w-10 h-10 text-muted-foreground/20 mx-auto mb-3" />
+              <p className="text-muted-foreground">Queue is empty</p>
+            </div>
           ) : (
-            <div className="space-y-2">
-              {queue.map((item) => (
-                <div 
-                  key={item.id} 
-                  className="flex items-center justify-between p-4 bg-zinc-950 rounded-lg border border-zinc-800"
-                >
-                  <div className="flex items-center gap-3">
-                    {getStatusIcon(item.status)}
-                    <div>
-                      <p className="text-white font-medium">{item.contact_name}</p>
-                      <p className="text-sm text-zinc-400">
-                        {item.sequence_name} • Step {item.step_number}
-                      </p>
-                      {item.error && (
-                        <p className="text-xs text-red-400 mt-1">{item.error}</p>
-                      )}
+            <div className="space-y-1.5">
+              {queue.map((item) => {
+                const cfg = statusConfig[item.status] || statusConfig.pending;
+                const Icon = cfg.icon;
+                return (
+                  <div key={item.id} className="flex items-center justify-between p-3.5 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-all border border-transparent hover:border-border/30">
+                    <div className="flex items-center gap-3">
+                      <Icon className={`w-4 h-4 ${cfg.color}`} />
+                      <div>
+                        <p className="text-sm font-medium text-white">{item.contact_name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {item.sequence_name ? `${item.sequence_name} \u00B7 Step ${item.step_number}` : 'Manual action'}
+                        </p>
+                        {item.error && (
+                          <p className="text-xs text-red-400 mt-0.5">{item.error}</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className={`text-xs font-medium px-2.5 py-1 rounded-md border capitalize ${
+                        item.action_type === 'connection'
+                          ? 'bg-blue-500/10 text-blue-400 border-blue-500/15'
+                          : 'bg-indigo-500/10 text-indigo-400 border-indigo-500/15'
+                      }`}>
+                        {item.action_type}
+                      </span>
+                      <span className={`text-xs font-medium px-2.5 py-1 rounded-md border ${cfg.bg}`}>
+                        {cfg.label}
+                      </span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <Badge variant="outline" className="capitalize">
-                      {item.action_type}
-                    </Badge>
-                    {getStatusBadge(item.status)}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

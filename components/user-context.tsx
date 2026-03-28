@@ -7,69 +7,59 @@ interface User {
   name: string;
   email: string;
   role: 'admin' | 'user';
+  team_id: number | null;
+  unipile_account_id: string | null;
+  pipedrive_api_key: string | null;
+  daily_limit: number;
+  message_delay_min: number;
+  message_delay_max: number;
+  send_schedule: any;
 }
 
 interface UserContextType {
-  users: User[];
   currentUser: User | null;
-  setCurrentUser: (user: User) => void;
   isAdmin: boolean;
   loading: boolean;
-  fetchWithUser: (url: string, options?: RequestInit) => Promise<Response>;
+  refreshUser: () => Promise<void>;
 }
 
 const UserContext = createContext<UserContextType>({
-  users: [],
   currentUser: null,
-  setCurrentUser: () => {},
   isAdmin: false,
   loading: true,
-  fetchWithUser: () => Promise.resolve(new Response()),
+  refreshUser: async () => {},
 });
 
 export function UserProvider({ children }: { children: ReactNode }) {
-  const [users, setUsers] = useState<User[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetch('/api/users')
-      .then(res => res.json())
-      .then(data => {
-        if (Array.isArray(data)) {
-          setUsers(data);
-          const saved = localStorage.getItem('currentUserId');
-          const initial = saved 
-            ? data.find((u: User) => u.id === parseInt(saved)) 
-            : data[0];
-          if (initial) setCurrentUser(initial);
-        }
-      })
-      .finally(() => setLoading(false));
-  }, []);
-
-  const handleSetCurrentUser = (user: User) => {
-    setCurrentUser(user);
-    localStorage.setItem('currentUserId', user.id.toString());
-    window.location.reload();
-  };
-
-  const fetchWithUser = async (url: string, options: RequestInit = {}) => {
-    const headers = new Headers(options.headers);
-    if (currentUser) {
-      headers.set('x-user-id', currentUser.id.toString());
+  const fetchCurrentUser = async () => {
+    try {
+      const res = await fetch('/api/auth/me');
+      if (res.ok) {
+        const user = await res.json();
+        setCurrentUser(user);
+      } else {
+        setCurrentUser(null);
+      }
+    } catch {
+      setCurrentUser(null);
+    } finally {
+      setLoading(false);
     }
-    return fetch(url, { ...options, headers });
   };
+
+  useEffect(() => {
+    fetchCurrentUser();
+  }, []);
 
   return (
     <UserContext.Provider value={{
-      users,
       currentUser,
-      setCurrentUser: handleSetCurrentUser,
       isAdmin: currentUser?.role === 'admin',
       loading,
-      fetchWithUser,
+      refreshUser: fetchCurrentUser,
     }}>
       {children}
     </UserContext.Provider>

@@ -1,6 +1,11 @@
 import './globals.css';
 import { Providers } from '@/components/providers';
 
+export const metadata = {
+  title: 'LinkedIn Prospector',
+  description: 'LinkedIn outreach automation for agencies',
+};
+
 export default function RootLayout({
   children,
 }: {
@@ -8,7 +13,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-zinc-950">
+      <body className="min-h-screen bg-background text-foreground antialiased">
         <Providers>
           {children}
         </Providers>

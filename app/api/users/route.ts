@@ -1,75 +1,94 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { users } from '@/lib/db-mem';
-import { verifyToken } from '@/lib/auth';
-
-// Helper to get current user from token
-function getCurrentUser(req: NextRequest) {
-  const token = req.cookies.get('auth_token')?.value;
-  if (!token) return null;
-  
-  // For now, return admin user (Jeff) as default
-  // In production, decode token to get user_id
-  return users.getById(1);
-}
+import { getUserFromRequest, requireAdmin } from '@/lib/api-auth';
+import { users } from '@/lib/db';
 
 export async function GET(req: NextRequest) {
-  const currentUser = getCurrentUser(req);
-  if (!currentUser) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const { userId, role } = getUserFromRequest(req);
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  // Admin can see all users, users can only see themselves
-  if (currentUser.role === 'admin') {
+  if (role === 'admin') {
     return NextResponse.json(users.getAll());
   }
-  
-  return NextResponse.json([currentUser]);
+
+  const user = users.getById(userId);
+  return NextResponse.json(user ? [user] : []);
 }
 
 export async function POST(req: NextRequest) {
-  const currentUser = getCurrentUser(req);
-  if (!currentUser || currentUser.role !== 'admin') {
+  try {
+    requireAdmin(req);
+  } catch {
     return NextResponse.json({ error: 'Admin required' }, { status: 403 });
   }
 
   try {
     const data = await req.json();
-    const user = users.create(data);
-    return NextResponse.json(user);
+    if (!data.name || !data.email || !data.password) {
+      return NextResponse.json({ error: 'Name, email, and password required' }, { status: 400 });
+    }
+
+    const existing = users.getByEmail(data.email);
+    if (existing) {
+      return NextResponse.json({ error: 'Email already in use' }, { status: 409 });
+    }
+
+    const result = users.create({
+      name: data.name,
+      email: data.email,
+      password: data.password,
+      role: data.role || 'user',
+      team_id: data.team_id,
+      unipile_account_id: data.unipile_account_id,
+    });
+
+    return NextResponse.json({ id: result.lastInsertRowid });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
 export async function PUT(req: NextRequest) {
-  const currentUser = getCurrentUser(req);
-  if (!currentUser) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const { userId, role } = getUserFromRequest(req);
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
     const { id, ...data } = await req.json();
-    
-    // Users can only update themselves, admin can update anyone
-    if (currentUser.role !== 'admin' && currentUser.id !== id) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    const targetId = id || userId;
+
+    // Regular users can only update themselves, and only allowed fields
+    if (role !== 'admin') {
+      if (targetId !== userId) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+      // Non-admins cannot change role, team_id, or unipile_account_id
+      delete data.role;
+      delete data.team_id;
+      delete data.unipile_account_id;
     }
-    
-    const user = users.update(id, data);
-    return NextResponse.json(user);
+
+    users.update(targetId, data);
+    const updated = users.getById(targetId);
+    return NextResponse.json(updated);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
 export async function DELETE(req: NextRequest) {
-  const currentUser = getCurrentUser(req);
-  if (!currentUser || currentUser.role !== 'admin') {
+  try {
+    requireAdmin(req);
+  } catch {
     return NextResponse.json({ error: 'Admin required' }, { status: 403 });
   }
 
   try {
+    const { userId } = getUserFromRequest(req);
     const { id } = await req.json();
+
+    if (id === userId) {
+      return NextResponse.json({ error: 'Cannot delete yourself' }, { status: 400 });
+    }
+
     users.delete(id);
     return NextResponse.json({ success: true });
   } catch (error: any) {

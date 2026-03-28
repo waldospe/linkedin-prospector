@@ -1,21 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { config, accounts } from '@/lib/db';
-
-const UNIPILE_API = 'https://api21.unipile.com:15135/api/v1';
+import { globalConfig } from '@/lib/db';
 
 export async function GET() {
   try {
-    const cfg = config.get() as any;
+    const cfg = globalConfig.get();
     if (!cfg?.unipile_api_key) {
       return NextResponse.json({ error: 'Unipile not configured' }, { status: 400 });
     }
 
-    // Test connection by fetching accounts
-    const response = await fetch(`${UNIPILE_API}/accounts`, {
+    const dsn = cfg.unipile_dsn || 'api21.unipile.com:15135';
+    const response = await fetch(`https://${dsn}/api/v1/accounts`, {
       headers: {
         'X-API-KEY': cfg.unipile_api_key,
-        'Accept': 'application/json'
-      }
+        'Accept': 'application/json',
+      },
     });
 
     if (!response.ok) {

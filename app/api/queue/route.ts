@@ -1,16 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { queue } from '@/lib/db-mem';
-
-function getUserId(req: NextRequest): number | undefined {
-  const userId = req.headers.get('x-user-id');
-  return userId ? parseInt(userId) : 1;
-}
+import { getUserFromRequest } from '@/lib/api-auth';
+import { queue } from '@/lib/db';
 
 export async function GET(req: NextRequest) {
   try {
-    const userId = getUserId(req);
-    const items = queue.getAll(userId);
-    return NextResponse.json(items);
+    const { userId } = getUserFromRequest(req);
+    return NextResponse.json(queue.getAll(userId));
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch queue' }, { status: 500 });
   }
@@ -18,9 +13,10 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const { userId } = getUserFromRequest(req);
     const data = await req.json();
-    const result = queue.create(data);
-    return NextResponse.json({ id: result.id });
+    const result = queue.create(userId, data);
+    return NextResponse.json({ id: result.lastInsertRowid });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to create queue item' }, { status: 500 });
   }

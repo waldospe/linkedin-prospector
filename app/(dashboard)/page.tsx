@@ -1,21 +1,18 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
 import { useUser } from '@/components/user-context';
-import { 
-  Users, 
-  Send, 
-  MessageCircle, 
-  Reply, 
-  ListTodo, 
+import {
+  Users,
+  Send,
+  MessageCircle,
+  Reply,
+  ListTodo,
   CheckCircle2,
   Clock,
   AlertCircle,
-  RefreshCw
+  RefreshCw,
+  TrendingUp,
 } from 'lucide-react';
 
 interface Stats {
@@ -31,7 +28,6 @@ interface QueueItem {
   contact_name: string;
   action_type: string;
   status: string;
-  scheduled_at: string;
 }
 
 interface Contact {
@@ -40,7 +36,7 @@ interface Contact {
 }
 
 export default function DashboardPage() {
-  const { fetchWithUser, currentUser } = useUser();
+  const { currentUser } = useUser();
   const [stats, setStats] = useState<Stats>({ today: { connections_sent: 0, messages_sent: 0, replies_received: 0 } });
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -48,22 +44,22 @@ export default function DashboardPage() {
   const [processing, setProcessing] = useState(false);
 
   useEffect(() => {
-    fetchData();
+    if (currentUser) fetchData();
   }, [currentUser]);
 
   const fetchData = async () => {
     try {
       const [statsRes, queueRes, contactsRes] = await Promise.all([
-        fetchWithUser('/api/stats'),
-        fetchWithUser('/api/queue'),
-        fetchWithUser('/api/contacts')
+        fetch('/api/stats'),
+        fetch('/api/queue'),
+        fetch('/api/contacts'),
       ]);
-      const statsData = await statsRes.json();
-      const queueData = await queueRes.json();
-      const contactsData = await contactsRes.json();
+      const [statsData, queueData, contactsData] = await Promise.all([
+        statsRes.json(), queueRes.json(), contactsRes.json(),
+      ]);
       setStats(statsData);
-      setQueue(queueData);
-      setContacts(contactsData);
+      setQueue(Array.isArray(queueData) ? queueData : []);
+      setContacts(Array.isArray(contactsData) ? contactsData : []);
     } catch (error) {
       console.error('Failed to fetch data:', error);
     } finally {
@@ -74,162 +70,166 @@ export default function DashboardPage() {
   const processQueue = async () => {
     setProcessing(true);
     try {
-      await fetchWithUser('/api/queue/process', { method: 'POST' });
+      await fetch('/api/queue/process', { method: 'POST' });
       fetchData();
-    } catch (error) {
-      console.error('Failed to process queue:', error);
     } finally {
       setProcessing(false);
     }
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'pending': return <Clock className="w-4 h-4 text-yellow-500" />;
-      case 'completed': return <CheckCircle2 className="w-4 h-4 text-green-500" />;
-      case 'failed': return <AlertCircle className="w-4 h-4 text-red-500" />;
-      default: return <Clock className="w-4 h-4 text-zinc-500" />;
-    }
+  const pendingCount = queue.filter(q => q.status === 'pending').length;
+  const dailyLimit = currentUser?.daily_limit || 20;
+  const dailyUsed = stats.today.connections_sent + stats.today.messages_sent;
+  const dailyProgress = Math.min((dailyUsed / dailyLimit) * 100, 100);
+
+  const statCards = [
+    { label: 'Connections', value: stats.today.connections_sent, icon: Send, color: 'blue' },
+    { label: 'Messages', value: stats.today.messages_sent, icon: MessageCircle, color: 'indigo' },
+    { label: 'Replies', value: stats.today.replies_received, icon: Reply, color: 'emerald' },
+    { label: 'Contacts', value: contacts.length, icon: Users, color: 'violet' },
+  ];
+
+  const colorMap: Record<string, string> = {
+    blue: 'text-blue-400 bg-blue-500/10 border-blue-500/15',
+    indigo: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/15',
+    emerald: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/15',
+    violet: 'text-violet-400 bg-violet-500/10 border-violet-500/15',
   };
 
-  const pendingCount = queue.filter(q => q.status === 'pending').length;
-  const dailyLimit = 20;
-  const dailyProgress = ((stats.today.connections_sent + stats.today.messages_sent) / dailyLimit) * 100;
+  const statusColors: Record<string, string> = {
+    pending: 'text-amber-400',
+    connected: 'text-blue-400',
+    messaged: 'text-indigo-400',
+    replied: 'text-emerald-400',
+  };
+
+  const statusBarColors: Record<string, string> = {
+    pending: 'bg-amber-500',
+    connected: 'bg-blue-500',
+    messaged: 'bg-indigo-500',
+    replied: 'bg-emerald-500',
+  };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-white">Dashboard</h1>
-          <p className="text-zinc-400 mt-1">
-            {currentUser ? `Viewing as ${currentUser.name}` : 'LinkedIn automation overview'}
-          </p>
+          <h1 className="text-2xl font-semibold text-white tracking-tight">
+            Welcome back{currentUser ? `, ${currentUser.name}` : ''}
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">Here&apos;s your outreach activity for today</p>
         </div>
-        <Button 
-          onClick={processQueue} 
+        <button
+          onClick={processQueue}
           disabled={processing || pendingCount === 0}
-          className="bg-blue-600 hover:bg-blue-700"
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all glow-sm"
         >
-          <RefreshCw className={`w-4 h-4 mr-2 ${processing ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-4 h-4 ${processing ? 'animate-spin' : ''}`} />
           {processing ? 'Processing...' : `Process Queue (${pendingCount})`}
-        </Button>
+        </button>
       </div>
 
+      {/* Stat cards */}
       <div className="grid grid-cols-4 gap-4">
-        <Card className="bg-zinc-900 border-zinc-800">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-zinc-400 flex items-center gap-2">
-              <Send size={16} /> Connections Today
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-white">{stats.today.connections_sent}</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-zinc-900 border-zinc-800">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-zinc-400 flex items-center gap-2">
-              <MessageCircle size={16} /> Messages Today
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-blue-400">{stats.today.messages_sent}</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-zinc-900 border-zinc-800">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-zinc-400 flex items-center gap-2">
-              <Reply size={16} /> Replies Today
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-green-400">{stats.today.replies_received}</p>
-          </CardContent>
-        </Card>
-        <Card className="bg-zinc-900 border-zinc-800">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-zinc-400 flex items-center gap-2">
-              <Users size={16} /> Total Contacts
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-white">{contacts.length}</p>
-          </CardContent>
-        </Card>
+        {statCards.map(({ label, value, icon: Icon, color }) => (
+          <div key={label} className="glass rounded-xl p-5 animate-slide-up">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</span>
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center border ${colorMap[color]}`}>
+                <Icon size={15} />
+              </div>
+            </div>
+            <p className="text-3xl font-semibold text-white tabular-nums">{value}</p>
+          </div>
+        ))}
       </div>
 
-      <Card className="bg-zinc-900 border-zinc-800">
-        <CardHeader>
-          <CardTitle className="text-white flex items-center justify-between">
-            <span>Daily Activity Limit</span>
-            <span className="text-sm text-zinc-400">
-              {stats.today.connections_sent + stats.today.messages_sent} / {dailyLimit}
-            </span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Progress value={dailyProgress} className="h-2" />
-          <p className="text-xs text-zinc-500 mt-2">
-            {dailyProgress >= 100 ? 'Daily limit reached' : `${Math.round(100 - dailyProgress)}% remaining`}
-          </p>
-        </CardContent>
-      </Card>
+      {/* Daily progress */}
+      <div className="glass rounded-xl p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <TrendingUp size={16} className="text-muted-foreground" />
+            <span className="text-sm font-medium text-white">Daily Activity</span>
+          </div>
+          <span className="text-sm tabular-nums text-muted-foreground">
+            {dailyUsed} / {dailyLimit}
+          </span>
+        </div>
+        <div className="h-2 bg-secondary rounded-full overflow-hidden">
+          <div
+            className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full transition-all duration-500"
+            style={{ width: `${dailyProgress}%` }}
+          />
+        </div>
+        <p className="text-xs text-muted-foreground mt-2">
+          {dailyProgress >= 100 ? 'Daily limit reached' : `${Math.round(100 - dailyProgress)}% remaining`}
+        </p>
+      </div>
 
+      {/* Two-column layout */}
       <div className="grid grid-cols-2 gap-6">
-        <Card className="bg-zinc-900 border-zinc-800">
-          <CardHeader>
-            <CardTitle className="text-white flex items-center gap-2">
-              <ListTodo size={16} /> Pending Queue
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <p className="text-zinc-500">Loading...</p>
-            ) : queue.filter(q => q.status === 'pending').length === 0 ? (
-              <p className="text-zinc-500">No pending items in queue</p>
-            ) : (
-              <div className="space-y-2">
-                {queue.filter(q => q.status === 'pending').slice(0, 5).map((item) => (
-                  <div key={item.id} className="flex items-center justify-between p-3 bg-zinc-950 rounded border border-zinc-800">
-                    <div>
-                      <p className="text-white text-sm">{item.contact_name}</p>
-                      <Badge variant="outline" className="text-xs mt-1">
-                        {item.action_type}
-                      </Badge>
-                    </div>
-                    {getStatusIcon(item.status)}
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="bg-zinc-900 border-zinc-800">
-          <CardHeader>
-            <CardTitle className="text-white">Contact Status</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {['pending', 'connected', 'messaged', 'replied'].map(status => {
-                const count = contacts.filter(c => c.status === status).length;
-                const percentage = contacts.length > 0 ? (count / contacts.length) * 100 : 0;
-                return (
-                  <div key={status} className="flex items-center gap-3">
-                    <span className="w-20 text-sm text-zinc-400 capitalize">{status}</span>
-                    <div className="flex-1 bg-zinc-950 rounded-full h-4 overflow-hidden">
-                      <div
-                        className="h-full bg-blue-600 transition-all"
-                        style={{ width: `${percentage}%` }}
-                      />
-                    </div>
-                    <span className="w-12 text-sm text-zinc-300 text-right">{count}</span>
-                  </div>
-                );
-              })}
+        {/* Pending queue */}
+        <div className="glass rounded-xl p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <ListTodo size={16} className="text-muted-foreground" />
+            <span className="text-sm font-medium text-white">Pending Queue</span>
+          </div>
+          {loading ? (
+            <div className="space-y-2">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="h-14 bg-secondary rounded-lg animate-pulse" />
+              ))}
             </div>
-          </CardContent>
-        </Card>
+          ) : pendingCount === 0 ? (
+            <div className="py-8 text-center">
+              <CheckCircle2 className="w-8 h-8 text-emerald-500/30 mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">All caught up</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {queue.filter(q => q.status === 'pending').slice(0, 5).map((item) => (
+                <div key={item.id} className="flex items-center justify-between p-3 rounded-lg bg-secondary/50 border border-border/50">
+                  <div className="flex items-center gap-3">
+                    <Clock className="w-4 h-4 text-amber-400" />
+                    <span className="text-sm text-white">{item.contact_name}</span>
+                  </div>
+                  <span className="text-xs font-medium px-2 py-1 rounded-md bg-secondary text-muted-foreground capitalize">
+                    {item.action_type}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Contact status */}
+        <div className="glass rounded-xl p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Users size={16} className="text-muted-foreground" />
+            <span className="text-sm font-medium text-white">Contact Status</span>
+          </div>
+          <div className="space-y-4">
+            {['pending', 'connected', 'messaged', 'replied'].map(status => {
+              const count = contacts.filter(c => c.status === status).length;
+              const percentage = contacts.length > 0 ? (count / contacts.length) * 100 : 0;
+              return (
+                <div key={status}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className={`text-xs font-medium capitalize ${statusColors[status]}`}>{status}</span>
+                    <span className="text-xs tabular-nums text-muted-foreground">{count}</span>
+                  </div>
+                  <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${statusBarColors[status]}`}
+                      style={{ width: `${percentage}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
     </div>
   );

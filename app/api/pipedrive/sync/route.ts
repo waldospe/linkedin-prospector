@@ -1,18 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { config, contacts } from '@/lib/db';
+import { getUserFromRequest } from '@/lib/api-auth';
+import { users, contacts } from '@/lib/db';
 
 const PIPEDRIVE_API = 'https://api.pipedrive.com/v1';
 
-export async function POST() {
+export async function POST(req: NextRequest) {
   try {
-    const cfg = config.get() as any;
-    if (!cfg?.pipedrive_api_key) {
+    const { userId } = getUserFromRequest(req);
+    const user = users.getById(userId) as any;
+
+    if (!user?.pipedrive_api_key) {
       return NextResponse.json({ error: 'Pipedrive not configured' }, { status: 400 });
     }
 
-    // Fetch persons from Pipedrive
-    const response = await fetch(`${PIPEDRIVE_API}/persons?api_token=${cfg.pipedrive_api_key}&limit=500`);
-    
+    const response = await fetch(`${PIPEDRIVE_API}/persons?api_token=${user.pipedrive_api_key}&limit=500`);
+
     if (!response.ok) {
       return NextResponse.json({ error: 'Failed to fetch from Pipedrive' }, { status: 400 });
     }
@@ -21,19 +23,20 @@ export async function POST() {
     const persons = data.data || [];
 
     let imported = 0;
+    const existingContacts = contacts.getAll(userId);
+
     for (const person of persons) {
-      // Check if already exists
-      const existing = contacts.getAll().find((c: any) => 
+      const existing = existingContacts.find((c: any) =>
         c.name === person.name || c.pipedrive_id === String(person.id)
       );
-      
+
       if (!existing && person.name) {
-        contacts.create({
+        contacts.create(userId, {
           name: person.name,
           company: person.org_name || '',
           title: person.job_title || '',
           source: 'pipedrive',
-          pipedrive_id: String(person.id)
+          pipedrive_id: String(person.id),
         });
         imported++;
       }

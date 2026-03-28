@@ -1,44 +1,26 @@
-import jwt from 'jsonwebtoken';
-import bcrypt from 'bcryptjs';
-import { cookies } from 'next/headers';
+import { SignJWT, jwtVerify } from 'jose';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'unipile-dashboard-secret-key-change-in-production';
+const JWT_SECRET = new TextEncoder().encode(
+  process.env.JWT_SECRET || 'moco-linkedin-prospector-secure-key'
+);
 
-export function hashPassword(password: string): string {
-  return bcrypt.hashSync(password, 10);
+export interface TokenPayload {
+  userId: number;
+  role: string;
 }
 
-export function verifyPassword(password: string, hash: string): boolean {
-  return bcrypt.compareSync(password, hash);
+export async function createToken(userId: number, role: string): Promise<string> {
+  return new SignJWT({ userId, role })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setExpirationTime('7d')
+    .sign(JWT_SECRET);
 }
 
-export function createToken(): string {
-  return jwt.sign({ authenticated: true }, JWT_SECRET, { expiresIn: '7d' });
-}
-
-export function verifyToken(token: string): boolean {
+export async function verifyToken(token: string): Promise<TokenPayload | null> {
   try {
-    jwt.verify(token, JWT_SECRET);
-    return true;
+    const { payload } = await jwtVerify(token, JWT_SECRET);
+    return { userId: payload.userId as number, role: payload.role as string };
   } catch {
-    return false;
-  }
-}
-
-export async function getAuthToken(): Promise<string | undefined> {
-  const cookieStore = await cookies();
-  return cookieStore.get('auth_token')?.value;
-}
-
-export async function isAuthenticated(): Promise<boolean> {
-  const token = await getAuthToken();
-  if (!token) return false;
-  return verifyToken(token);
-}
-
-export async function requireAuth() {
-  const authenticated = await isAuthenticated();
-  if (!authenticated) {
-    throw new Error('Unauthorized');
+    return null;
   }
 }

@@ -5,32 +5,44 @@ const JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET || 'moco-linkedin-prospector-secure-key'
 );
 
-async function verifyToken(token: string): Promise<boolean> {
+async function decodeToken(token: string): Promise<{ userId: number; role: string } | null> {
   try {
-    await jwtVerify(token, JWT_SECRET);
-    return true;
+    const { payload } = await jwtVerify(token, JWT_SECRET);
+    return { userId: payload.userId as number, role: payload.role as string };
   } catch {
-    return false;
+    return null;
   }
 }
 
 export async function middleware(request: Request) {
   const url = new URL(request.url);
-  
-  // Allow login and auth API routes
+
+  // Allow login page and auth API routes through
   if (url.pathname === '/login' || url.pathname.startsWith('/api/auth')) {
     return NextResponse.next();
   }
 
-  // Check for auth token in cookie
+  // Extract auth token from cookie
   const cookieHeader = request.headers.get('cookie');
   const token = cookieHeader?.match(/auth_token=([^;]+)/)?.[1];
-  
-  if (!token || !(await verifyToken(token))) {
+
+  if (!token) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  return NextResponse.next();
+  const decoded = await decodeToken(token);
+  if (!decoded) {
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
+
+  // Inject user identity into request headers (server-side, trusted)
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set('x-user-id', decoded.userId.toString());
+  requestHeaders.set('x-user-role', decoded.role);
+
+  return NextResponse.next({
+    request: { headers: requestHeaders },
+  });
 }
 
 export const config = {

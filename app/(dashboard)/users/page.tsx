@@ -2,17 +2,19 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useUser } from '@/components/user-context';
-import { Users, Plus, Trash2, User } from 'lucide-react';
+import { Plus, Trash2, User, Linkedin, Key, Save, UserCog, X } from 'lucide-react';
 
 interface UserType {
   id: number;
   name: string;
   email: string;
   role: string;
+  team_id: number | null;
+  unipile_account_id: string | null;
+  pipedrive_api_key: string | null;
+  daily_limit: number;
 }
 
 export default function UsersPage() {
@@ -20,127 +22,206 @@ export default function UsersPage() {
   const { isAdmin, currentUser } = useUser();
   const [users, setUsers] = useState<UserType[]>([]);
   const [loading, setLoading] = useState(true);
-  const [newUser, setNewUser] = useState({ name: '', email: '' });
+  const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'user' });
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editFields, setEditFields] = useState<Record<string, any>>({});
+  const [message, setMessage] = useState('');
 
   useEffect(() => {
-    if (!isAdmin) {
-      router.push('/');
-      return;
-    }
+    if (!isAdmin) { router.push('/'); return; }
     fetchUsers();
   }, [isAdmin]);
 
   const fetchUsers = async () => {
     const res = await fetch('/api/users');
     const data = await res.json();
-    if (Array.isArray(data)) {
-      setUsers(data);
-    }
+    if (Array.isArray(data)) setUsers(data);
     setLoading(false);
   };
 
   const createUser = async () => {
-    if (!newUser.name || !newUser.email) return;
-    
+    if (!newUser.name || !newUser.email || !newUser.password) return;
     const res = await fetch('/api/users', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newUser)
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...newUser, team_id: currentUser?.team_id }),
     });
-    
     if (res.ok) {
-      setNewUser({ name: '', email: '' });
+      setNewUser({ name: '', email: '', password: '', role: 'user' });
+      setShowAddForm(false);
       fetchUsers();
+      showMsg('User created');
+    } else {
+      const data = await res.json();
+      showMsg(data.error || 'Failed');
     }
   };
 
-  const deleteUser = async (id: number) => {
-    if (!confirm('Are you sure?')) return;
-    
+  const updateUser = async (id: number) => {
+    const clean = { ...editFields };
+    if (!clean.password) delete clean.password;
     await fetch('/api/users', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id })
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, ...clean }),
     });
-    
+    setEditingId(null);
+    setEditFields({});
     fetchUsers();
+    showMsg('Updated');
+  };
+
+  const deleteUser = async (id: number) => {
+    if (!confirm('Delete this user and all their data?')) return;
+    await fetch('/api/users', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+    fetchUsers();
+  };
+
+  const showMsg = (m: string) => { setMessage(m); setTimeout(() => setMessage(''), 3000); };
+
+  const startEdit = (u: UserType) => {
+    setEditingId(u.id);
+    setEditFields({ unipile_account_id: u.unipile_account_id || '', pipedrive_api_key: u.pipedrive_api_key || '', daily_limit: u.daily_limit, password: '' });
   };
 
   if (!isAdmin) return null;
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-white">User Management</h1>
-        <p className="text-zinc-400 mt-1">Manage team members and their access</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-white tracking-tight">Team</h1>
+          <p className="text-sm text-muted-foreground mt-1">{users.length} members</p>
+        </div>
+        <button
+          onClick={() => setShowAddForm(!showAddForm)}
+          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 transition-all glow-sm"
+        >
+          {showAddForm ? <X size={15} /> : <Plus size={15} />}
+          {showAddForm ? 'Cancel' : 'Add Member'}
+        </button>
       </div>
 
-      <Card className="bg-zinc-900 border-zinc-800">
-        <CardHeader>
-          <CardTitle className="text-white flex items-center gap-2">
-            <Plus className="w-5 h-5" />
-            Add New User
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-3">
-            <Input
-              placeholder="Name"
-              value={newUser.name}
-              onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
-              className="bg-zinc-950 border-zinc-800 text-white"
-            />
-            <Input
-              placeholder="Email"
-              value={newUser.email}
-              onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-              className="bg-zinc-950 border-zinc-800 text-white"
-            />
-            <Button onClick={createUser} className="bg-blue-600 hover:bg-blue-700">
-              <Plus className="w-4 h-4 mr-2" />
-              Add User
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      {message && (
+        <div className="px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm animate-fade-in">
+          {message}
+        </div>
+      )}
 
-      <div className="grid gap-4">
-        {loading ? (
-          <p className="text-zinc-500">Loading...</p>
-        ) : (
-          users.map((user) => (
-            <Card key={user.id} className="bg-zinc-900 border-zinc-800">
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-blue-600/20 flex items-center justify-center">
-                      <User className="w-5 h-5 text-blue-500" />
-                    </div>
-                    <div>
-                      <h3 className="text-white font-medium">{user.name}</h3>
-                      <p className="text-zinc-400 text-sm">{user.email}</p>
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-zinc-800 text-zinc-400 mt-1">
-                        {user.role}
-                      </span>
-                    </div>
+      {/* Add form */}
+      {showAddForm && (
+        <div className="glass rounded-xl p-6 animate-slide-up">
+          <h3 className="text-sm font-medium text-white mb-4">New Team Member</h3>
+          <div className="grid grid-cols-2 gap-3 max-w-xl">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Name</label>
+              <Input placeholder="Full name" value={newUser.name} onChange={(e) => setNewUser({ ...newUser, name: e.target.value })} className="bg-background/50 border-border h-10" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Email</label>
+              <Input placeholder="email@moco.inc" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} className="bg-background/50 border-border h-10" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Password</label>
+              <Input type="password" placeholder="Initial password" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} className="bg-background/50 border-border h-10" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Role</label>
+              <select value={newUser.role} onChange={(e) => setNewUser({ ...newUser, role: e.target.value })} className="w-full h-10 bg-background/50 text-white text-sm rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50">
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+          </div>
+          <button onClick={createUser} className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 transition-all">
+            <Plus size={14} /> Create User
+          </button>
+        </div>
+      )}
+
+      {/* User list */}
+      {loading ? (
+        <div className="space-y-3">{[...Array(5)].map((_, i) => <div key={i} className="h-20 bg-secondary rounded-xl animate-pulse" />)}</div>
+      ) : (
+        <div className="space-y-2">
+          {users.map((user) => (
+            <div key={user.id} className="glass glass-hover rounded-xl p-5">
+              <div className="flex items-start justify-between">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500/15 to-indigo-500/15 border border-blue-500/10 flex items-center justify-center text-sm font-semibold text-blue-300 shrink-0">
+                    {user.name.charAt(0)}
                   </div>
-                  
+                  <div>
+                    <h3 className="text-sm font-medium text-white">{user.name}</h3>
+                    <p className="text-xs text-muted-foreground">{user.email}</p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-md border ${
+                        user.role === 'admin'
+                          ? 'text-blue-400 bg-blue-500/10 border-blue-500/15'
+                          : 'text-muted-foreground bg-secondary border-border/50'
+                      }`}>{user.role}</span>
+                      <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-md border ${
+                        user.unipile_account_id
+                          ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/15'
+                          : 'text-muted-foreground bg-secondary border-border/50'
+                      }`}>
+                        <Linkedin size={9} />
+                        {user.unipile_account_id ? 'Linked' : 'Not linked'}
+                      </span>
+                      {user.pipedrive_api_key && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-md border text-violet-400 bg-violet-500/10 border-violet-500/15">
+                          <Key size={9} /> Pipedrive
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Inline edit */}
+                    {editingId === user.id && (
+                      <div className="mt-4 space-y-3 max-w-md animate-slide-up">
+                        <div>
+                          <label className="text-xs text-muted-foreground mb-1 block">Unipile Account ID</label>
+                          <Input value={editFields.unipile_account_id || ''} onChange={(e) => setEditFields({ ...editFields, unipile_account_id: e.target.value })} className="bg-background/50 border-border h-8 text-sm" />
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground mb-1 block">Pipedrive API Key</label>
+                          <Input type="password" value={editFields.pipedrive_api_key || ''} onChange={(e) => setEditFields({ ...editFields, pipedrive_api_key: e.target.value })} className="bg-background/50 border-border h-8 text-sm" />
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground mb-1 block">Daily Limit</label>
+                          <Input type="number" value={editFields.daily_limit} onChange={(e) => setEditFields({ ...editFields, daily_limit: parseInt(e.target.value) })} className="bg-background/50 border-border h-8 text-sm w-24" />
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground mb-1 block">Reset Password</label>
+                          <Input type="password" value={editFields.password || ''} onChange={(e) => setEditFields({ ...editFields, password: e.target.value })} placeholder="Leave blank to keep" className="bg-background/50 border-border h-8 text-sm" />
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => updateUser(user.id)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-500 transition-all">
+                            <Save size={12} /> Save
+                          </button>
+                          <button onClick={() => { setEditingId(null); setEditFields({}); }} className="px-3 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-white hover:bg-secondary transition-all">
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {editingId !== user.id && (
+                    <button onClick={() => startEdit(user)} className="px-3 py-1.5 rounded-md text-xs text-muted-foreground hover:text-white hover:bg-secondary transition-all">
+                      Edit
+                    </button>
+                  )}
                   {user.id !== currentUser?.id && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => deleteUser(user.id)}
-                      className="text-red-500 hover:text-red-400 hover:bg-red-500/10"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
+                    <button onClick={() => deleteUser(user.id)} className="p-1.5 rounded-md text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-all">
+                      <Trash2 size={14} />
+                    </button>
                   )}
                 </div>
-              </CardContent>
-            </Card>
-          ))
-        )}
-      </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
