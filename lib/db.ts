@@ -37,7 +37,7 @@ function initDb() {
       db.exec(`DROP TABLE IF EXISTS ${t}`);
     }
     db.exec('DELETE FROM schema_version');
-    db.exec('INSERT INTO schema_version (version) VALUES (4)');
+    db.exec('INSERT INTO schema_version (version) VALUES (5)');
   }
 
   if (currentVersion >= 2 && currentVersion < 4) {
@@ -64,6 +64,15 @@ function initDb() {
     db.exec('UPDATE schema_version SET version = 4');
   }
 
+  if (currentVersion === 4) {
+    // v4 -> v5: Add timezone to users
+    const uCols = db.pragma('table_info(users)') as any[];
+    if (uCols && !uCols.find((c: any) => c.name === 'timezone')) {
+      db.exec(`ALTER TABLE users ADD COLUMN timezone TEXT DEFAULT 'America/Los_Angeles'`);
+    }
+    db.exec('UPDATE schema_version SET version = 5');
+  }
+
   // Teams
   db.exec(`
     CREATE TABLE IF NOT EXISTS teams (
@@ -88,6 +97,7 @@ function initDb() {
       message_delay_min INTEGER DEFAULT 15,
       message_delay_max INTEGER DEFAULT 20,
       send_schedule TEXT DEFAULT '{"mon":{"enabled":true,"start":"08:00","end":"17:00"},"tue":{"enabled":true,"start":"08:00","end":"17:00"},"wed":{"enabled":true,"start":"08:00","end":"17:00"},"thu":{"enabled":true,"start":"08:00","end":"17:00"},"fri":{"enabled":true,"start":"08:00","end":"17:00"},"sat":{"enabled":false,"start":"08:00","end":"12:00"},"sun":{"enabled":false,"start":"08:00","end":"12:00"}}',
+      timezone TEXT DEFAULT 'America/Los_Angeles',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);

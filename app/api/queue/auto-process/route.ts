@@ -25,8 +25,8 @@ export async function POST(req: NextRequest) {
       // Skip users without Unipile account
       if (!user.unipile_account_id) continue;
 
-      // Check send schedule
-      if (!isInSendWindow(user.send_schedule)) continue;
+      // Check send schedule in user's timezone
+      if (!isInSendWindow(user.send_schedule, user.timezone)) continue;
 
       // Check daily limit
       const today = stats.getToday(user.id);
@@ -203,17 +203,21 @@ export async function POST(req: NextRequest) {
   }
 }
 
-function isInSendWindow(schedule: any): boolean {
-  if (!schedule) return true; // no schedule = always send
+function isInSendWindow(schedule: any, timezone?: string): boolean {
+  if (!schedule) return true;
 
+  // Get current time in user's timezone
+  const tz = timezone || 'America/Los_Angeles';
   const now = new Date();
+  const userTime = new Date(now.toLocaleString('en-US', { timeZone: tz }));
+
   const days = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-  const dayKey = days[now.getDay()];
+  const dayKey = days[userTime.getDay()];
   const daySchedule = schedule[dayKey];
 
   if (!daySchedule || !daySchedule.enabled) return false;
 
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const currentMinutes = userTime.getHours() * 60 + userTime.getMinutes();
   const [startH, startM] = (daySchedule.start || '08:00').split(':').map(Number);
   const [endH, endM] = (daySchedule.end || '17:00').split(':').map(Number);
   const startMinutes = startH * 60 + startM;

@@ -3,7 +3,38 @@
 import { useEffect, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { useUser } from '@/components/user-context';
-import { Save, Key, Clock, Shield, Lock, CheckCircle2 } from 'lucide-react';
+import { Save, Key, Clock, Shield, Lock, CheckCircle2, Globe, Calendar } from 'lucide-react';
+
+const TIMEZONES = [
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+  'America/Phoenix',
+  'America/Anchorage',
+  'Pacific/Honolulu',
+  'America/Toronto',
+  'America/Vancouver',
+  'Europe/London',
+  'Europe/Paris',
+  'Europe/Berlin',
+  'Asia/Tokyo',
+  'Asia/Shanghai',
+  'Australia/Sydney',
+  'Pacific/Auckland',
+];
+
+const DAY_LABELS: Record<string, string> = {
+  mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday',
+  fri: 'Friday', sat: 'Saturday', sun: 'Sunday',
+};
+const DAY_ORDER = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+interface SendDay {
+  enabled: boolean;
+  start: string;
+  end: string;
+}
 
 interface Config {
   unipile_api_key?: string;
@@ -12,7 +43,19 @@ interface Config {
   daily_limit: number;
   message_delay_min: number;
   message_delay_max: number;
+  timezone: string;
+  send_schedule: Record<string, SendDay>;
 }
+
+const defaultSchedule: Record<string, SendDay> = {
+  mon: { enabled: true, start: '08:00', end: '17:00' },
+  tue: { enabled: true, start: '08:00', end: '17:00' },
+  wed: { enabled: true, start: '08:00', end: '17:00' },
+  thu: { enabled: true, start: '08:00', end: '17:00' },
+  fri: { enabled: true, start: '08:00', end: '17:00' },
+  sat: { enabled: false, start: '08:00', end: '12:00' },
+  sun: { enabled: false, start: '08:00', end: '12:00' },
+};
 
 export default function SettingsPage() {
   const { isAdmin } = useUser();
@@ -21,6 +64,8 @@ export default function SettingsPage() {
     daily_limit: 20,
     message_delay_min: 15,
     message_delay_max: 20,
+    timezone: 'America/Los_Angeles',
+    send_schedule: defaultSchedule,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -31,7 +76,12 @@ export default function SettingsPage() {
   const fetchConfig = async () => {
     try {
       const res = await fetch('/api/config');
-      setConfig(await res.json());
+      const data = await res.json();
+      setConfig({
+        ...data,
+        send_schedule: data.send_schedule || defaultSchedule,
+        timezone: data.timezone || 'America/Los_Angeles',
+      });
     } finally { setLoading(false); }
   };
 
@@ -50,6 +100,16 @@ export default function SettingsPage() {
       setSaving(false);
       setTimeout(() => setMessage(''), 3000);
     }
+  };
+
+  const updateDay = (day: string, field: string, value: any) => {
+    setConfig(prev => ({
+      ...prev,
+      send_schedule: {
+        ...prev.send_schedule,
+        [day]: { ...prev.send_schedule[day], [field]: value },
+      },
+    }));
   };
 
   if (loading) {
@@ -122,6 +182,81 @@ export default function SettingsPage() {
         <div>
           <label className="text-xs font-medium text-muted-foreground mb-1.5 block">API Key</label>
           <Input type="password" value={config.pipedrive_api_key || ''} onChange={(e) => setConfig({ ...config, pipedrive_api_key: e.target.value })} placeholder="Enter your Pipedrive API key..." className="bg-background/50 border-border h-10 max-w-md" />
+        </div>
+      </div>
+
+      {/* Timezone */}
+      <div className="glass rounded-xl p-6">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/15 flex items-center justify-center">
+            <Globe size={14} className="text-cyan-400" />
+          </div>
+          <div>
+            <h3 className="text-sm font-medium text-white">Timezone</h3>
+            <p className="text-xs text-muted-foreground">Used for your send schedule window</p>
+          </div>
+        </div>
+        <select
+          value={config.timezone}
+          onChange={(e) => setConfig({ ...config, timezone: e.target.value })}
+          className="h-10 bg-background/50 text-white text-sm rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50 w-64"
+        >
+          {TIMEZONES.map(tz => (
+            <option key={tz} value={tz}>{tz.replace(/_/g, ' ')}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Send Schedule */}
+      <div className="glass rounded-xl p-6">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/15 flex items-center justify-center">
+            <Calendar size={14} className="text-indigo-400" />
+          </div>
+          <div>
+            <h3 className="text-sm font-medium text-white">Send Schedule</h3>
+            <p className="text-xs text-muted-foreground">When the queue is allowed to send messages</p>
+          </div>
+        </div>
+        <div className="space-y-2">
+          {DAY_ORDER.map(day => {
+            const d = config.send_schedule[day] || { enabled: false, start: '08:00', end: '17:00' };
+            return (
+              <div key={day} className="flex items-center gap-3 p-3 rounded-lg bg-secondary/30">
+                <label className="flex items-center gap-2 w-28 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={d.enabled}
+                    onChange={(e) => updateDay(day, 'enabled', e.target.checked)}
+                    className="w-4 h-4 rounded border-border bg-background accent-blue-600"
+                  />
+                  <span className={`text-sm font-medium ${d.enabled ? 'text-white' : 'text-muted-foreground'}`}>
+                    {DAY_LABELS[day]}
+                  </span>
+                </label>
+                {d.enabled && (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="time"
+                      value={d.start}
+                      onChange={(e) => updateDay(day, 'start', e.target.value)}
+                      className="h-8 bg-background/50 text-white text-sm rounded-lg px-2 border border-border focus:outline-none focus:border-blue-500/50"
+                    />
+                    <span className="text-xs text-muted-foreground">to</span>
+                    <input
+                      type="time"
+                      value={d.end}
+                      onChange={(e) => updateDay(day, 'end', e.target.value)}
+                      className="h-8 bg-background/50 text-white text-sm rounded-lg px-2 border border-border focus:outline-none focus:border-blue-500/50"
+                    />
+                  </div>
+                )}
+                {!d.enabled && (
+                  <span className="text-xs text-muted-foreground">Off</span>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 
