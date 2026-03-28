@@ -1,24 +1,32 @@
 import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
+import { jwtVerify } from 'jose';
 
-export function middleware(request: NextRequest) {
-  const url = request.nextUrl.clone();
+const JWT_SECRET = new TextEncoder().encode(
+  process.env.JWT_SECRET || 'moco-linkedin-prospector-secure-key'
+);
+
+async function verifyToken(token: string): Promise<boolean> {
+  try {
+    await jwtVerify(token, JWT_SECRET);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function middleware(request: Request) {
+  const url = new URL(request.url);
   
-  // Allow access to login and auth endpoints
-  if (
-    url.pathname === '/login' || 
-    url.pathname.startsWith('/api/auth') ||
-    url.pathname.startsWith('/_next') ||
-    url.pathname.startsWith('/static') ||
-    url.pathname === '/favicon.ico'
-  ) {
+  // Allow login and auth API routes
+  if (url.pathname === '/login' || url.pathname.startsWith('/api/auth')) {
     return NextResponse.next();
   }
 
-  // Check for auth cookie
-  const auth = request.cookies.get('auth');
+  // Check for auth token in cookie
+  const cookieHeader = request.headers.get('cookie');
+  const token = cookieHeader?.match(/auth_token=([^;]+)/)?.[1];
   
-  if (!auth || auth.value !== 'true') {
+  if (!token || !(await verifyToken(token))) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 

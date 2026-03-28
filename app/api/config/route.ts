@@ -1,16 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { config } from '@/lib/db';
+import { users } from '@/lib/db-mem';
 
-export async function GET() {
+function getUserId(req: NextRequest): number {
+  const userId = req.headers.get('x-user-id');
+  return userId ? parseInt(userId) : 1;
+}
+
+export async function GET(req: NextRequest) {
   try {
-    const cfg = config.get() as any;
+    const userId = getUserId(req);
+    const user = users.getById(userId);
+    
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+    
     return NextResponse.json({
-      unipile_api_key: cfg.unipile_api_key,
-      unipile_dsn: cfg.unipile_dsn,
-      pipedrive_api_key: cfg.pipedrive_api_key,
-      daily_limit: cfg.daily_limit,
-      message_delay_min: cfg.message_delay_min,
-      message_delay_max: cfg.message_delay_max
+      unipile_api_key: user.unipile_api_key,
+      unipile_dsn: user.unipile_dsn,
+      pipedrive_api_key: user.pipedrive_api_key,
+      daily_limit: user.daily_limit,
+      message_delay_min: user.message_delay_min,
+      message_delay_max: user.message_delay_max,
+      send_schedule: user.send_schedule
     });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch config' }, { status: 500 });
@@ -19,8 +31,9 @@ export async function GET() {
 
 export async function PUT(req: NextRequest) {
   try {
+    const userId = getUserId(req);
     const data = await req.json();
-    config.update(data);
+    users.update(userId, data);
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to update config' }, { status: 500 });

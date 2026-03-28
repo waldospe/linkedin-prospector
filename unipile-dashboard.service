@@ -1,0 +1,19 @@
+[Unit]
+Description=Unipile Dashboard
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/apps/unipile-dashboard
+Environment=NODE_ENV=production
+Environment=PORT=3462
+Environment=HOSTNAME=0.0.0.0
+Environment=DATABASE_PATH=/home/ubuntu/apps/unipile-dashboard/data/app.db
+Environment=JWT_SECRET=unipile-dashboard-secret-key-change-me
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

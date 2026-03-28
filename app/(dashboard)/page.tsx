@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { useUser } from '@/components/user-context';
 import { 
   Users, 
   Send, 
@@ -39,6 +40,7 @@ interface Contact {
 }
 
 export default function DashboardPage() {
+  const { fetchWithUser, currentUser } = useUser();
   const [stats, setStats] = useState<Stats>({ today: { connections_sent: 0, messages_sent: 0, replies_received: 0 } });
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -47,14 +49,14 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [currentUser]);
 
   const fetchData = async () => {
     try {
       const [statsRes, queueRes, contactsRes] = await Promise.all([
-        fetch('/api/stats'),
-        fetch('/api/queue'),
-        fetch('/api/contacts')
+        fetchWithUser('/api/stats'),
+        fetchWithUser('/api/queue'),
+        fetchWithUser('/api/contacts')
       ]);
       const statsData = await statsRes.json();
       const queueData = await queueRes.json();
@@ -72,7 +74,7 @@ export default function DashboardPage() {
   const processQueue = async () => {
     setProcessing(true);
     try {
-      await fetch('/api/queue/process', { method: 'POST' });
+      await fetchWithUser('/api/queue/process', { method: 'POST' });
       fetchData();
     } catch (error) {
       console.error('Failed to process queue:', error);
@@ -99,7 +101,9 @@ export default function DashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-white">Dashboard</h1>
-          <p className="text-zinc-400 mt-1">LinkedIn automation overview</p>
+          <p className="text-zinc-400 mt-1">
+            {currentUser ? `Viewing as ${currentUser.name}` : 'LinkedIn automation overview'}
+          </p>
         </div>
         <Button 
           onClick={processQueue} 
