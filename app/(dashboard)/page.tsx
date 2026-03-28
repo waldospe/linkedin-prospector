@@ -11,7 +11,6 @@ import {
   ListTodo,
   CheckCircle2,
   Clock,
-  RefreshCw,
   TrendingUp,
 } from 'lucide-react';
 
@@ -36,7 +35,6 @@ export default function DashboardPage() {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [funnel, setFunnel] = useState<Array<{ status: string; count: number }>>([]);
   const [loading, setLoading] = useState(true);
-  const [processing, setProcessing] = useState(false);
 
   useEffect(() => {
     if (currentUser) fetchData();
@@ -60,21 +58,10 @@ export default function DashboardPage() {
     }
   };
 
-  const processQueue = async () => {
-    setProcessing(true);
-    try {
-      const res = await fetch('/api/queue/process', { method: 'POST' });
-      const data = await res.json();
-      if (data.errors?.length) {
-        console.warn('Queue processing errors:', data.errors);
-      }
-      fetchData();
-    } finally {
-      setProcessing(false);
-    }
-  };
+  // Queue is now auto-processed by cron — no manual button needed
 
   const pendingCount = queue.filter(q => q.status === 'pending').length;
+  const failedCount = queue.filter(q => q.status === 'failed').length;
   const dailyLimit = currentUser?.daily_limit || 20;
   const dailyUsed = stats.today.connections_sent + stats.today.messages_sent;
   const dailyProgress = Math.min((dailyUsed / dailyLimit) * 100, 100);
@@ -109,14 +96,25 @@ export default function DashboardPage() {
           </h1>
           <p className="text-sm text-muted-foreground mt-1">Here&apos;s your outreach activity for today</p>
         </div>
-        <button
-          onClick={processQueue}
-          disabled={processing || pendingCount === 0}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all glow-sm"
-        >
-          <RefreshCw className={`w-4 h-4 ${processing ? 'animate-spin' : ''}`} />
-          {processing ? 'Processing...' : `Process Queue (${pendingCount})`}
-        </button>
+        <div className="flex items-center gap-3">
+          {pendingCount > 0 && (
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/15">
+              <Clock className="w-3.5 h-3.5" />
+              {pendingCount} queued
+            </span>
+          )}
+          {failedCount > 0 && (
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 border border-red-500/15">
+              {failedCount} failed
+            </span>
+          )}
+          {pendingCount === 0 && failedCount === 0 && (
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/15">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              All clear
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Stat cards */}

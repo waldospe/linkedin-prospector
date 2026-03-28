@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { RefreshCw, Clock, CheckCircle2, AlertCircle, Pause, ListTodo } from 'lucide-react';
+import { Clock, CheckCircle2, AlertCircle, Pause, ListTodo } from 'lucide-react';
 
 interface QueueItem {
   id: number;
@@ -26,7 +26,6 @@ const statusConfig: Record<string, { icon: any; color: string; bg: string; label
 export default function QueuePage() {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [processing, setProcessing] = useState(false);
 
   useEffect(() => { fetchQueue(); }, []);
 
@@ -35,14 +34,6 @@ export default function QueuePage() {
       const res = await fetch('/api/queue');
       setQueue(await res.json());
     } finally { setLoading(false); }
-  };
-
-  const processQueue = async () => {
-    setProcessing(true);
-    try {
-      await fetch('/api/queue/process', { method: 'POST' });
-      fetchQueue();
-    } finally { setProcessing(false); }
   };
 
   const counts = {
@@ -61,19 +52,9 @@ export default function QueuePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-white tracking-tight">Queue</h1>
-          <p className="text-sm text-muted-foreground mt-1">Pending and completed outreach actions</p>
-        </div>
-        <button
-          onClick={processQueue}
-          disabled={processing || counts.pending === 0}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all glow-sm"
-        >
-          <RefreshCw className={`w-4 h-4 ${processing ? 'animate-spin' : ''}`} />
-          {processing ? 'Processing...' : 'Process Queue'}
-        </button>
+      <div>
+        <h1 className="text-2xl font-semibold text-white tracking-tight">Queue</h1>
+        <p className="text-sm text-muted-foreground mt-1">Queue processes automatically during your send window</p>
       </div>
 
       {/* Summary */}
