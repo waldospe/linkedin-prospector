@@ -42,21 +42,33 @@ export async function POST(req: NextRequest) {
 
     const profile = await res.json();
 
-    // Extract fields from Unipile profile response
-    const firstName = profile.first_name || profile.firstName || '';
-    const lastName = profile.last_name || profile.lastName || '';
-    const fullName = profile.name || [firstName, lastName].filter(Boolean).join(' ') || '';
-    const title = profile.headline || profile.title || profile.job_title || '';
-    const company = profile.company?.name || profile.company_name || profile.organization || '';
+    // Log the full response so we can see the actual field names
+    console.log('UNIPILE PROFILE RESPONSE:', JSON.stringify(profile, null, 2));
 
-    return NextResponse.json({
+    // Try every possible field name pattern
+    const firstName = profile.first_name || profile.firstName || profile.FirstName || '';
+    const lastName = profile.last_name || profile.lastName || profile.LastName || '';
+    const fullName = profile.name || profile.Name || profile.display_name || profile.displayName
+      || [firstName, lastName].filter(Boolean).join(' ') || '';
+    const title = profile.headline || profile.title || profile.job_title || profile.jobTitle
+      || profile.position || profile.Headline || '';
+    const company = profile.company?.name || profile.company_name || profile.companyName
+      || profile.organization || profile.current_company || profile.Company || '';
+
+    // If we got nothing useful, return the raw profile so frontend can show something
+    const result = {
       first_name: firstName,
       last_name: lastName,
       name: fullName,
       title,
       company,
       linkedin_url: url,
-    });
+      _raw_keys: Object.keys(profile), // for debugging
+    };
+
+    console.log('LOOKUP RESULT:', JSON.stringify(result));
+
+    return NextResponse.json(result);
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
