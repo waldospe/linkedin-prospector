@@ -58,6 +58,8 @@ export default function ContactsPage() {
     fieldLabels: {}, validFields: [], result: null, error: '',
   });
   const [sheetsUrl, setSheetsUrl] = useState('');
+  const [lookingUp, setLookingUp] = useState(false);
+  const [lookupError, setLookupError] = useState('');
 
   useEffect(() => {
     fetchContacts();
@@ -73,8 +75,38 @@ export default function ContactsPage() {
     } finally { setLoading(false); }
   };
 
+  const lookupLinkedIn = async (url: string) => {
+    if (!url || lookingUp) return;
+    setLookingUp(true);
+    setLookupError('');
+    try {
+      const res = await fetch('/api/contacts/lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ linkedin_url: url }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setNewContact(prev => ({
+          ...prev,
+          first_name: data.first_name || prev.first_name,
+          last_name: data.last_name || prev.last_name,
+          company: data.company || prev.company,
+          title: data.title || prev.title,
+          linkedin_url: data.linkedin_url || prev.linkedin_url,
+        }));
+      } else {
+        setLookupError(data.error || 'Lookup failed');
+      }
+    } catch {
+      setLookupError('Failed to look up profile');
+    } finally {
+      setLookingUp(false);
+    }
+  };
+
   const addContact = async () => {
-    if (!newContact.first_name && !newContact.last_name) return;
+    if (!newContact.first_name && !newContact.last_name && !newContact.linkedin_url) return;
     const payload: any = { ...newContact };
     if (payload.sequence_id) payload.sequence_id = parseInt(payload.sequence_id);
     else delete payload.sequence_id;
@@ -264,11 +296,36 @@ export default function ContactsPage() {
                 <DialogTitle className="text-lg font-semibold">Add Contact</DialogTitle>
               </DialogHeader>
               <div className="space-y-3 mt-2">
+                {/* LinkedIn URL with lookup */}
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1.5 block">LinkedIn URL</label>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="https://linkedin.com/in/..."
+                      value={newContact.linkedin_url}
+                      onChange={(e) => setNewContact({ ...newContact, linkedin_url: e.target.value })}
+                      onBlur={(e) => { if (e.target.value.includes('linkedin.com')) lookupLinkedIn(e.target.value); }}
+                      className="bg-background/50 border-border h-10 flex-1"
+                    />
+                    <button
+                      onClick={() => lookupLinkedIn(newContact.linkedin_url)}
+                      disabled={lookingUp || !newContact.linkedin_url}
+                      className="px-3 h-10 rounded-lg bg-secondary border border-border text-xs font-medium text-muted-foreground hover:text-white hover:bg-accent disabled:opacity-40 transition-all shrink-0"
+                    >
+                      {lookingUp ? (
+                        <div className="w-4 h-4 border-2 border-muted-foreground/30 border-t-white rounded-full animate-spin" />
+                      ) : (
+                        'Lookup'
+                      )}
+                    </button>
+                  </div>
+                  {lookupError && <p className="text-xs text-red-400 mt-1">{lookupError}</p>}
+                  <p className="text-[11px] text-muted-foreground mt-1">Paste a LinkedIn URL and click Lookup to auto-fill contact details</p>
+                </div>
                 <div className="grid grid-cols-2 gap-3">
                   <Input placeholder="First name" value={newContact.first_name} onChange={(e) => setNewContact({ ...newContact, first_name: e.target.value })} className="bg-background/50 border-border h-10" />
                   <Input placeholder="Last name" value={newContact.last_name} onChange={(e) => setNewContact({ ...newContact, last_name: e.target.value })} className="bg-background/50 border-border h-10" />
                 </div>
-                <Input placeholder="LinkedIn URL" value={newContact.linkedin_url} onChange={(e) => setNewContact({ ...newContact, linkedin_url: e.target.value })} className="bg-background/50 border-border h-10" />
                 <Input placeholder="Company" value={newContact.company} onChange={(e) => setNewContact({ ...newContact, company: e.target.value })} className="bg-background/50 border-border h-10" />
                 <Input placeholder="Title" value={newContact.title} onChange={(e) => setNewContact({ ...newContact, title: e.target.value })} className="bg-background/50 border-border h-10" />
                 {sequencesList.length > 0 && (
