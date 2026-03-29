@@ -20,6 +20,14 @@ interface Step {
   delay_hours: number;
 }
 
+const AVAILABLE_VARS = [
+  { key: 'firstName', label: 'First Name' },
+  { key: 'lastName', label: 'Last Name' },
+  { key: 'fullName', label: 'Full Name' },
+  { key: 'company', label: 'Company' },
+  { key: 'title', label: 'Title' },
+];
+
 interface Sequence {
   id: number;
   name: string;
@@ -81,22 +89,7 @@ export default function SequencesPage() {
     }
   };
 
-  const availableVars = [
-    { key: 'firstName', label: 'First Name' },
-    { key: 'lastName', label: 'Last Name' },
-    { key: 'fullName', label: 'Full Name' },
-    { key: 'company', label: 'Company' },
-    { key: 'title', label: 'Title' },
-  ];
-
-  const insertVar = (seq: Sequence | null, stepIdx: number, varKey: string) => {
-    const tag = `{{${varKey}}}`;
-    const steps = seq ? seq.steps : newSequence.steps;
-    const current = steps[stepIdx].template || '';
-    updateStep(seq, stepIdx, 'template', current + tag);
-  };
-
-  const StepEditor = ({ steps, seq }: { steps: Step[]; seq: Sequence | null }) => (
+  const renderSteps = (steps: Step[], seq: Sequence | null) => (
     <div className="space-y-3">
       {steps.map((step, i) => (
         <div key={i} className="p-4 bg-background/50 rounded-xl border border-border/50 space-y-3">
@@ -127,11 +120,16 @@ export default function SequencesPage() {
           <div>
             <label className="text-[11px] font-medium text-muted-foreground mb-1.5 block">Insert Variable</label>
             <div className="flex flex-wrap gap-1.5">
-              {availableVars.map(v => (
+              {AVAILABLE_VARS.map(v => (
                 <button
                   key={v.key}
                   type="button"
-                  onClick={() => insertVar(seq, i, v.key)}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    const tag = `{{${v.key}}}`;
+                    const current = step.template || '';
+                    updateStep(seq, i, 'template', current + tag);
+                  }}
                   className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-md bg-violet-500/10 text-violet-400 border border-violet-500/15 hover:bg-violet-500/20 transition-colors cursor-pointer"
                 >
                   <Tag size={9} />
@@ -149,7 +147,6 @@ export default function SequencesPage() {
                 : "Hey {{firstName}}, following up on my connection request..."}
               value={step.template}
               onChange={(e) => updateStep(seq, i, 'template', e.target.value)}
-              onKeyDown={(e) => e.stopPropagation()}
               rows={4}
               className="w-full bg-secondary/50 border border-border rounded-lg px-3 py-2 text-sm text-white placeholder:text-muted-foreground/40 focus:outline-none focus:border-blue-500/50 resize-y min-h-[80px]"
             />
@@ -177,7 +174,7 @@ export default function SequencesPage() {
             <DialogHeader><DialogTitle className="text-lg font-semibold">Create Sequence</DialogTitle></DialogHeader>
             <div className="space-y-4 mt-2">
               <Input placeholder="Sequence name" value={newSequence.name} onChange={(e) => setNewSequence({ ...newSequence, name: e.target.value })} className="bg-background/50 border-border h-10" />
-              <StepEditor steps={newSequence.steps} seq={null} />
+              {renderSteps(newSequence.steps, null)}
               <button onClick={() => addStep(null)} className="w-full py-2 rounded-lg border border-dashed border-border text-sm text-muted-foreground hover:text-white hover:border-border/80 transition-all">
                 <Plus size={14} className="inline mr-1" /> Add Step
               </button>
@@ -258,7 +255,7 @@ export default function SequencesPage() {
             <DialogHeader><DialogTitle className="text-lg font-semibold">Edit Sequence</DialogTitle></DialogHeader>
             <div className="space-y-4 mt-2">
               <Input placeholder="Sequence name" value={editingSequence.name} onChange={(e) => setEditingSequence({ ...editingSequence, name: e.target.value })} className="bg-background/50 border-border h-10" />
-              <StepEditor steps={editingSequence.steps} seq={editingSequence} />
+              {renderSteps(editingSequence.steps, editingSequence)}
               <button onClick={() => addStep(editingSequence)} className="w-full py-2 rounded-lg border border-dashed border-border text-sm text-muted-foreground hover:text-white hover:border-border/80 transition-all">
                 <Plus size={14} className="inline mr-1" /> Add Step
               </button>
