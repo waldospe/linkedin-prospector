@@ -158,12 +158,18 @@ export async function POST(req: NextRequest) {
             stats.increment('connections_sent', user.id);
 
           } else if (item.action_type === 'message') {
+            if (!alreadyConnected) {
+              queue.updateStatus(item.id, 'failed', user.id, 'Cannot message — not connected on LinkedIn');
+              errors.push(`${item.contact_name}: not connected`);
+              continue;
+            }
+
             const msgRes = await fetch(`${baseUrl}/chats`, {
               method: 'POST',
               headers: apiHeaders,
               body: JSON.stringify({
                 account_id: user.unipile_account_id,
-                attendee_id: providerId,
+                attendees_ids: [providerId],
                 text: messageText,
               }),
             });

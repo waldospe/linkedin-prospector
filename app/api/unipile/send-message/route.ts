@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         account_id: user.unipile_account_id,
-        attendee_id: profile.id,
+        attendees_ids: [profile.provider_id || profile.id],
         text: message,
       }),
     });
