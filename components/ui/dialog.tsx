@@ -47,6 +47,14 @@ function DialogContent({
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
 }) {
+  // Prevent base-ui Dialog from swallowing keyboard events in form elements
+  const handleKeyDown = React.useCallback((e: React.KeyboardEvent) => {
+    const tag = (e.target as HTMLElement).tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+      e.stopPropagation();
+    }
+  }, []);
+
   return (
     <DialogPortal>
       <DialogOverlay />
@@ -56,16 +64,11 @@ function DialogContent({
           "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-background p-4 text-sm ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
           className
         )}
-        onKeyDown={(e: React.KeyboardEvent) => {
-          // Prevent Dialog from intercepting keys when typing in inputs/textareas
-          const tag = (e.target as HTMLElement).tagName;
-          if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
-            e.stopPropagation();
-          }
-        }}
         {...props}
       >
-        {children}
+        <div onKeyDownCapture={handleKeyDown}>
+          {children}
+        </div>
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
