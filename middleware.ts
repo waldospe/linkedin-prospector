@@ -17,8 +17,8 @@ async function decodeToken(token: string): Promise<{ userId: number; role: strin
 export async function middleware(request: Request) {
   const url = new URL(request.url);
 
-  // Allow login page and auth login/check routes through (but NOT /api/auth/me)
-  if (url.pathname === '/login' || url.pathname === '/api/auth' || url.pathname === '/api/auth/check') {
+  // Allow login page, auth routes, and cron endpoint through
+  if (url.pathname === '/login' || url.pathname === '/api/auth' || url.pathname === '/api/auth/check' || url.pathname === '/api/queue/auto-process') {
     return NextResponse.next();
   }
 
