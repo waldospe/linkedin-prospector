@@ -11,7 +11,8 @@ import {
   DialogTitle,
   DialogTrigger
 } from '@/components/ui/dialog';
-import { Plus, Trash2, Edit2, GitBranch, ArrowRight } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Plus, Trash2, Edit2, GitBranch, ArrowRight, Tag } from 'lucide-react';
 
 interface Step {
   action: string;
@@ -80,6 +81,21 @@ export default function SequencesPage() {
     }
   };
 
+  const availableVars = [
+    { key: 'firstName', label: 'First Name' },
+    { key: 'lastName', label: 'Last Name' },
+    { key: 'fullName', label: 'Full Name' },
+    { key: 'company', label: 'Company' },
+    { key: 'title', label: 'Title' },
+  ];
+
+  const insertVar = (seq: Sequence | null, stepIdx: number, varKey: string) => {
+    const tag = `{{${varKey}}}`;
+    const steps = seq ? seq.steps : newSequence.steps;
+    const current = steps[stepIdx].template || '';
+    updateStep(seq, stepIdx, 'template', current + tag);
+  };
+
   const StepEditor = ({ steps, seq }: { steps: Step[]; seq: Sequence | null }) => (
     <div className="space-y-3">
       {steps.map((step, i) => (
@@ -96,21 +112,48 @@ export default function SequencesPage() {
               <option value="connection">Connection Request</option>
               <option value="message">Message</option>
             </select>
+            <div className="ml-auto flex items-center gap-2 text-sm">
+              <span className="text-muted-foreground">Wait</span>
+              <Input
+                type="number" value={step.delay_hours}
+                onChange={(e) => updateStep(seq, i, 'delay_hours', parseInt(e.target.value))}
+                className="w-20 bg-secondary/50 border-border h-8 text-sm text-center"
+              />
+              <span className="text-muted-foreground">hours</span>
+            </div>
           </div>
-          <Input
-            placeholder="Message template"
-            value={step.template}
-            onChange={(e) => updateStep(seq, i, 'template', e.target.value)}
-            className="bg-secondary/50 border-border h-9 text-sm"
-          />
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-muted-foreground">Wait</span>
-            <Input
-              type="number" value={step.delay_hours}
-              onChange={(e) => updateStep(seq, i, 'delay_hours', parseInt(e.target.value))}
-              className="w-20 bg-secondary/50 border-border h-8 text-sm text-center"
+
+          {/* Variable chips */}
+          <div>
+            <label className="text-[11px] font-medium text-muted-foreground mb-1.5 block">Insert Variable</label>
+            <div className="flex flex-wrap gap-1.5">
+              {availableVars.map(v => (
+                <button
+                  key={v.key}
+                  type="button"
+                  onClick={() => insertVar(seq, i, v.key)}
+                  className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-md bg-violet-500/10 text-violet-400 border border-violet-500/15 hover:bg-violet-500/20 transition-colors cursor-pointer"
+                >
+                  <Tag size={9} />
+                  {v.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Message textarea */}
+          <div>
+            <textarea
+              placeholder={step.action === 'connection'
+                ? "Hi {{firstName}}, I'd love to connect..."
+                : "Hey {{firstName}}, following up on my connection request..."}
+              value={step.template}
+              onChange={(e) => updateStep(seq, i, 'template', e.target.value)}
+              onKeyDown={(e) => e.stopPropagation()}
+              rows={4}
+              className="w-full bg-secondary/50 border border-border rounded-lg px-3 py-2 text-sm text-white placeholder:text-muted-foreground/40 focus:outline-none focus:border-blue-500/50 resize-y min-h-[80px]"
             />
-            <span className="text-muted-foreground">hours</span>
+            <p className="text-[10px] text-muted-foreground mt-1">Variables like {'{{firstName}}'} are replaced with contact data when sent</p>
           </div>
         </div>
       ))}
