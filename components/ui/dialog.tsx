@@ -47,12 +47,23 @@ function DialogContent({
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
 }) {
-  // Prevent base-ui Dialog from swallowing keyboard events in form elements
-  const handleKeyDown = React.useCallback((e: React.KeyboardEvent) => {
-    const tag = (e.target as HTMLElement).tagName;
-    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
-      e.stopPropagation();
-    }
+  // base-ui Dialog intercepts keyboard events at a level stopPropagation can't reach.
+  // Use a ref to add a native capture-phase listener that runs before React/base-ui.
+  const contentRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const el = contentRef.current;
+    if (!el) return;
+
+    const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+        e.stopImmediatePropagation();
+      }
+    };
+
+    el.addEventListener('keydown', handler, true); // true = capture phase
+    return () => el.removeEventListener('keydown', handler, true);
   }, []);
 
   return (
@@ -66,7 +77,7 @@ function DialogContent({
         )}
         {...props}
       >
-        <div onKeyDownCapture={handleKeyDown}>
+        <div ref={contentRef}>
           {children}
         </div>
         {showCloseButton && (
