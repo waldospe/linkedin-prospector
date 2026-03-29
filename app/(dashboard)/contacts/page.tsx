@@ -405,7 +405,7 @@ export default function ContactsPage() {
                     <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
                     {cfg.label}
                   </span>
-                  {contact.status === 'new' && sequencesList.length > 0 && (
+                  {sequencesList.length > 0 && !['queued', 'opted_out'].includes(contact.status) && (
                     <select
                       defaultValue=""
                       onChange={(e) => { if (e.target.value) assignSequence(contact.id, parseInt(e.target.value)); }}
