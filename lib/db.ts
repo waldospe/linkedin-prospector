@@ -525,6 +525,14 @@ export const queue = {
   clearFailed: (userId: number) => {
     return getDb().prepare('DELETE FROM queue WHERE user_id = ? AND status = ?').run(userId, 'failed');
   },
+  getLastCompletedForContact: (userId: number, contactId: number) => {
+    return getDb().prepare(`
+      SELECT q.*, s.steps as sequence_steps FROM queue q
+      LEFT JOIN sequences s ON q.sequence_id = s.id
+      WHERE q.user_id = ? AND q.contact_id = ? AND q.status = 'completed'
+      ORDER BY q.id DESC LIMIT 1
+    `).get(userId, contactId) as any;
+  },
 };
 
 // Messages (scoped to user)

@@ -19,19 +19,35 @@ export async function POST(req: NextRequest) {
     }
 
     const allUsers = users.getAll() as any[];
-    const results: Array<{ user: string; processed: number; errors: string[] }> = [];
+    const results: Array<{ user: string; processed: number; errors: string[]; monitored?: number }> = [];
+    const dsn = cfg.unipile_dsn || 'api21.unipile.com:15135';
+    const baseUrl = `https://${dsn}/api/v1`;
 
     for (const user of allUsers) {
       // Skip users without Unipile account
       if (!user.unipile_account_id) continue;
 
+      // === PHASE 1: Monitor invite acceptances and replies (runs regardless of send window) ===
+      let monitored = 0;
+      try {
+        monitored = await monitorContacts(user, cfg, baseUrl);
+      } catch (e: any) {
+        console.error(`Monitor error for ${user.name}:`, e.message);
+      }
+
       // Check send schedule in user's timezone
-      if (!isInSendWindow(user.send_schedule, user.timezone)) continue;
+      if (!isInSendWindow(user.send_schedule, user.timezone)) {
+        if (monitored > 0) results.push({ user: user.name, processed: 0, errors: [], monitored });
+        continue;
+      }
 
       // Check daily limit
       const today = stats.getToday(user.id);
       const dailyUsed = today.connections_sent + today.messages_sent;
-      if (dailyUsed >= user.daily_limit) continue;
+      if (dailyUsed >= user.daily_limit) {
+        if (monitored > 0) results.push({ user: user.name, processed: 0, errors: [], monitored });
+        continue;
+      }
 
       // Get pending items (only those scheduled for now or earlier)
       const pending = queue.getPending(user.id) as any[];
@@ -227,8 +243,8 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      if (processed.length > 0 || errors.length > 0) {
-        results.push({ user: user.name, processed: processed.length, errors });
+      if (processed.length > 0 || errors.length > 0 || monitored > 0) {
+        results.push({ user: user.name, processed: processed.length, errors, monitored });
       }
     }
 
@@ -237,6 +253,115 @@ export async function POST(req: NextRequest) {
     console.error('Auto-process error:', error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+}
+
+// Monitor contacts for invite acceptances and replies
+async function monitorContacts(user: any, cfg: any, baseUrl: string): Promise<number> {
+  let updated = 0;
+  const apiHeaders = { 'X-API-KEY': cfg.unipile_api_key, 'Accept': 'application/json' };
+
+  // Check contacts with invite_sent — have they accepted?
+  const inviteSent = contacts.getByStatus('invite_sent', user.id) as any[];
+  for (const contact of inviteSent.slice(0, 5)) { // check up to 5 per cycle
+    if (!contact.linkedin_url) continue;
+    const slugMatch = contact.linkedin_url.match(/linkedin\.com\/in\/([a-zA-Z0-9\-_.]+)/);
+    if (!slugMatch) continue;
+
+    try {
+      const res = await fetch(`${baseUrl}/users/${slugMatch[1]}?account_id=${user.unipile_account_id}`, { headers: apiHeaders });
+      if (!res.ok) continue;
+
+      const profile = await res.json();
+      if (profile.is_relationship === true || profile.network_distance === 'FIRST_DEGREE') {
+        // They accepted! Update status and queue next sequence step
+        contacts.updateStatus(contact.id, 'connected', user.id);
+        updated++;
+
+        // Find the last completed queue item for this contact to advance the sequence
+        const lastItem = queue.getLastCompletedForContact(user.id, contact.id);
+        if (lastItem?.sequence_id && lastItem.sequence_steps) {
+          const steps = typeof lastItem.sequence_steps === 'string' ? JSON.parse(lastItem.sequence_steps) : lastItem.sequence_steps;
+          const nextStepIdx = lastItem.step_number; // 0-indexed next
+          if (nextStepIdx < steps.length) {
+            const nextStep = steps[nextStepIdx];
+            const contactData = {
+              first_name: contact.first_name, last_name: contact.last_name,
+              name: contact.name, company: contact.company, title: contact.title,
+            };
+            const nextMessage = nextStep.template
+              ? substituteVariables(nextStep.template, contactData)
+              : '';
+            queue.create(user.id, {
+              contact_id: contact.id,
+              sequence_id: lastItem.sequence_id,
+              step_number: lastItem.step_number + 1,
+              action_type: nextStep.action,
+              message_text: nextMessage,
+              scheduled_at: new Date(Date.now() + (nextStep.delay_hours || 0) * 3600000).toISOString(),
+            });
+          }
+        }
+      } else {
+        // Check if invite has been pending too long (14 days)
+        const createdAt = new Date(contact.created_at).getTime();
+        const daysPending = (Date.now() - createdAt) / (1000 * 60 * 60 * 24);
+        if (daysPending > 14) {
+          contacts.updateStatus(contact.id, 'no_response', user.id);
+          updated++;
+        }
+      }
+    } catch {
+      // Skip on error, will retry next cycle
+    }
+
+    // Small delay between API calls
+    await new Promise(r => setTimeout(r, 500));
+  }
+
+  // Check contacts with msg_sent — have they replied?
+  const msgSent = contacts.getByStatus('msg_sent', user.id) as any[];
+  for (const contact of msgSent.slice(0, 5)) {
+    if (!contact.linkedin_url) continue;
+    const slugMatch = contact.linkedin_url.match(/linkedin\.com\/in\/([a-zA-Z0-9\-_.]+)/);
+    if (!slugMatch) continue;
+
+    try {
+      // Check if there's a chat with this person that has new messages from them
+      const res = await fetch(
+        `${baseUrl}/users/${slugMatch[1]}?account_id=${user.unipile_account_id}`,
+        { headers: apiHeaders }
+      );
+      if (!res.ok) continue;
+      const profile = await res.json();
+      const providerId = profile.provider_id || profile.id;
+
+      // Check chats for messages from this person
+      const chatsRes = await fetch(
+        `${baseUrl}/chats?account_id=${user.unipile_account_id}&attendee_id=${providerId}&limit=1`,
+        { headers: apiHeaders }
+      );
+      if (!chatsRes.ok) continue;
+      const chatsData = await chatsRes.json();
+      const chatItems = chatsData.items || chatsData || [];
+
+      if (Array.isArray(chatItems) && chatItems.length > 0) {
+        const chat = chatItems[0];
+        // If the last message is from the other person (not us), they replied
+        if (chat.last_message && chat.last_message.sender_id === providerId) {
+          contacts.updateStatus(contact.id, 'replied', user.id);
+          stats.increment('replies_received', user.id);
+          messages.markReplied(contact.id, user.id);
+          updated++;
+        }
+      }
+    } catch {
+      // Skip on error
+    }
+
+    await new Promise(r => setTimeout(r, 500));
+  }
+
+  return updated;
 }
 
 function isInSendWindow(schedule: any, timezone?: string): boolean {
