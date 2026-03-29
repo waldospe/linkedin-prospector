@@ -286,14 +286,14 @@ export const users = {
   getAll: () => {
     return getDb().prepare(`
       SELECT id, name, email, role, team_id, unipile_account_id, pipedrive_api_key,
-             daily_limit, message_delay_min, message_delay_max, send_schedule, created_at
+             daily_limit, message_delay_min, message_delay_max, send_schedule, timezone, created_at
       FROM users ORDER BY name
     `).all().map(parseUserSchedule);
   },
   getById: (id: number) => {
     const row = getDb().prepare(`
       SELECT id, name, email, role, team_id, unipile_account_id, pipedrive_api_key,
-             daily_limit, message_delay_min, message_delay_max, send_schedule, created_at
+             daily_limit, message_delay_min, message_delay_max, send_schedule, timezone, created_at
       FROM users WHERE id = ?
     `).get(id);
     return row ? parseUserSchedule(row) : null;
@@ -304,7 +304,7 @@ export const users = {
   getByTeam: (teamId: number) => {
     return getDb().prepare(`
       SELECT id, name, email, role, team_id, unipile_account_id, pipedrive_api_key,
-             daily_limit, message_delay_min, message_delay_max, send_schedule, created_at
+             daily_limit, message_delay_min, message_delay_max, send_schedule, timezone, created_at
       FROM users WHERE team_id = ? ORDER BY name
     `).all(teamId).map(parseUserSchedule);
   },
