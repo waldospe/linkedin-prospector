@@ -519,6 +519,12 @@ export const queue = {
       WHERE user_id = ? AND contact_id = ? AND sequence_id = ? AND step_number = ? AND status = 'pending'
     `).get(userId, contactId, sequenceId, currentStep + 1);
   },
+  delete: (id: number, userId: number) => {
+    return getDb().prepare('DELETE FROM queue WHERE id = ? AND user_id = ?').run(id, userId);
+  },
+  clearFailed: (userId: number) => {
+    return getDb().prepare('DELETE FROM queue WHERE user_id = ? AND status = ?').run(userId, 'failed');
+  },
 };
 
 // Messages (scoped to user)

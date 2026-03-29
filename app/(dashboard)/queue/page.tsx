@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Clock, CheckCircle2, AlertCircle, Pause, ListTodo } from 'lucide-react';
+import { Clock, CheckCircle2, AlertCircle, Pause, ListTodo, Trash2, RefreshCw, X } from 'lucide-react';
 
 interface QueueItem {
   id: number;
@@ -36,6 +36,25 @@ export default function QueuePage() {
     } finally { setLoading(false); }
   };
 
+  const removeItem = async (id: number) => {
+    await fetch(`/api/queue/${id}`, { method: 'DELETE' });
+    fetchQueue();
+  };
+
+  const retryItem = async (id: number) => {
+    await fetch(`/api/queue/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ retry: true }),
+    });
+    fetchQueue();
+  };
+
+  const clearAllFailed = async () => {
+    await fetch('/api/queue/clear-failed', { method: 'POST' });
+    fetchQueue();
+  };
+
   const counts = {
     pending: queue.filter(q => q.status === 'pending').length,
     completed: queue.filter(q => q.status === 'completed').length,
@@ -52,9 +71,20 @@ export default function QueuePage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-white tracking-tight">Queue</h1>
-        <p className="text-sm text-muted-foreground mt-1">Queue processes automatically during your send window</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-white tracking-tight">Queue</h1>
+          <p className="text-sm text-muted-foreground mt-1">Queue processes automatically during your send window</p>
+        </div>
+        {counts.failed > 0 && (
+          <button
+            onClick={clearAllFailed}
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg border border-red-500/20 text-sm font-medium text-red-400 hover:bg-red-500/10 transition-all"
+          >
+            <Trash2 size={14} />
+            Clear {counts.failed} Failed
+          </button>
+        )}
       </div>
 
       {/* Summary */}
@@ -101,7 +131,7 @@ export default function QueuePage() {
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
                       <span className={`text-xs font-medium px-2.5 py-1 rounded-md border capitalize ${
                         item.action_type === 'connection'
                           ? 'bg-blue-500/10 text-blue-400 border-blue-500/15'
@@ -112,6 +142,33 @@ export default function QueuePage() {
                       <span className={`text-xs font-medium px-2.5 py-1 rounded-md border ${cfg.bg}`}>
                         {cfg.label}
                       </span>
+                      {item.status === 'failed' && (
+                        <>
+                          <button
+                            onClick={() => retryItem(item.id)}
+                            className="p-1.5 rounded-md text-muted-foreground hover:text-amber-400 hover:bg-amber-500/10 transition-all"
+                            title="Retry"
+                          >
+                            <RefreshCw size={13} />
+                          </button>
+                          <button
+                            onClick={() => removeItem(item.id)}
+                            className="p-1.5 rounded-md text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-all"
+                            title="Remove"
+                          >
+                            <X size={13} />
+                          </button>
+                        </>
+                      )}
+                      {item.status === 'pending' && (
+                        <button
+                          onClick={() => removeItem(item.id)}
+                          className="p-1.5 rounded-md text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-all"
+                          title="Remove"
+                        >
+                          <X size={13} />
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
