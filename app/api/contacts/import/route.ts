@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserFromRequest } from '@/lib/api-auth';
-import { contacts } from '@/lib/db';
-import { normalizeLinkedInUrl, isValidLinkedInUrl } from '@/lib/constants';
+import { contacts, sequences, queue } from '@/lib/db';
+import { normalizeLinkedInUrl, isValidLinkedInUrl, substituteVariables } from '@/lib/constants';
 
 // Known contact fields and common CSV header aliases
 const FIELD_ALIASES: Record<string, string[]> = {
@@ -83,7 +83,35 @@ export async function POST(req: NextRequest) {
 
       const count = contacts.bulkCreate(userId, mapped);
 
-      return NextResponse.json({ imported: count, total: rows.length, invalidUrls });
+      // Assign to sequence if specified
+      let sequenced = 0;
+      if (body.sequence_id && count > 0) {
+        const seq = sequences.getById(body.sequence_id, userId) as any;
+        if (seq) {
+          const steps = typeof seq.steps === 'string' ? JSON.parse(seq.steps) : seq.steps;
+          if (steps.length > 0) {
+            // Get the newly created contacts (last N by created_at)
+            const allContacts = contacts.getAll(userId) as any[];
+            const newContacts = allContacts.slice(0, count); // getAll returns DESC by created_at
+            for (const c of newContacts) {
+              const messageText = steps[0].template
+                ? substituteVariables(steps[0].template, c)
+                : '';
+              queue.create(userId, {
+                contact_id: c.id,
+                sequence_id: body.sequence_id,
+                step_number: 1,
+                action_type: steps[0].action,
+                message_text: messageText,
+              });
+              contacts.updateStatus(c.id, 'queued', userId);
+              sequenced++;
+            }
+          }
+        }
+      }
+
+      return NextResponse.json({ imported: count, total: rows.length, invalidUrls, sequenced });
     }
 
     return NextResponse.json({ error: 'Invalid request. Send { headers } or { rows, mapping }' }, { status: 400 });

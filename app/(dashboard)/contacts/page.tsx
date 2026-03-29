@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Input } from '@/components/ui/input';
 import {
   Dialog,
@@ -10,7 +10,7 @@ import {
   DialogTrigger
 } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Trash2, Upload, ExternalLink, Search, Users, FileSpreadsheet, Link2, CheckCircle2, AlertCircle, ArrowRight } from 'lucide-react';
+import { Plus, Trash2, Upload, ExternalLink, Search, Users, FileSpreadsheet, Link2, CheckCircle2, AlertCircle, ArrowRight, Filter, GitBranch } from 'lucide-react';
 import { FUNNEL_STAGES, stageColors, STAGE_MAP } from '@/lib/constants';
 
 interface Contact {
@@ -43,19 +43,24 @@ interface ImportState {
   validFields: string[];
   result: { imported: number; total: number } | null;
   error: string;
+  sequenceId: string;
 }
 
 export default function ContactsPage() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterSource, setFilterSource] = useState('all');
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkSequenceId, setBulkSequenceId] = useState('');
   const [newContact, setNewContact] = useState({ first_name: '', last_name: '', linkedin_url: '', company: '', title: '', sequence_id: '' });
   const [sequencesList, setSequencesList] = useState<Array<{ id: number; name: string }>>([]);
   const [importing, setImporting] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [importState, setImportState] = useState<ImportState>({
     step: 'choose', headers: [], rows: [], mapping: {}, suggestions: {},
-    fieldLabels: {}, validFields: [], result: null, error: '',
+    fieldLabels: {}, validFields: [], result: null, error: '', sequenceId: '',
   });
   const [sheetsUrl, setSheetsUrl] = useState('');
   const [lookingUp, setLookingUp] = useState(false);
@@ -122,15 +127,6 @@ export default function ContactsPage() {
     fetchContacts();
   };
 
-  const assignSequence = async (contactId: number, sequenceId: number) => {
-    await fetch(`/api/contacts/${contactId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sequence_id: sequenceId }),
-    });
-    fetchContacts();
-  };
-
   const deleteContact = async (id: number) => {
     if (!confirm('Delete this contact?')) return;
     await fetch(`/api/contacts/${id}`, { method: 'DELETE' });
@@ -146,6 +142,32 @@ export default function ContactsPage() {
     fetchContacts();
   };
 
+  const assignSequence = async (contactId: number, sequenceId: number) => {
+    await fetch(`/api/contacts/${contactId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sequence_id: sequenceId }),
+    });
+    fetchContacts();
+  };
+
+  const bulkAssignSequence = async () => {
+    if (!bulkSequenceId || selectedIds.size === 0) return;
+    const seqId = parseInt(bulkSequenceId);
+    await Promise.all(
+      Array.from(selectedIds).map(id =>
+        fetch(`/api/contacts/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sequence_id: seqId }),
+        })
+      )
+    );
+    setSelectedIds(new Set());
+    setBulkSequenceId('');
+    fetchContacts();
+  };
+
   const importFromPipedrive = async () => {
     setImporting(true);
     try {
@@ -157,7 +179,6 @@ export default function ContactsPage() {
     } finally { setImporting(false); }
   };
 
-  // CSV file handling
   const handleCsvFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -181,7 +202,6 @@ export default function ContactsPage() {
     reader.readAsText(file);
   };
 
-  // Google Sheets handling
   const handleSheetsImport = async () => {
     if (!sheetsUrl) return;
     setImportState(s => ({ ...s, error: '' }));
@@ -202,7 +222,6 @@ export default function ContactsPage() {
     }
   };
 
-  // Validate headers with the API
   const validateHeaders = async (headers: string[], rows: any[]) => {
     const res = await fetch('/api/contacts/import', {
       method: 'POST',
@@ -210,7 +229,6 @@ export default function ContactsPage() {
       body: JSON.stringify({ headers }),
     });
     const data = await res.json();
-    // Auto-fill mapping from suggestions
     const mapping: Record<string, string> = {};
     for (const [header, suggested] of Object.entries(data.suggestions)) {
       if (suggested) mapping[header] = suggested as string;
@@ -222,14 +240,17 @@ export default function ContactsPage() {
     }));
   };
 
-  // Execute import with confirmed mapping
   const executeImport = async () => {
     setImportState(s => ({ ...s, step: 'importing' }));
     try {
       const res = await fetch('/api/contacts/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rows: importState.rows, mapping: importState.mapping }),
+        body: JSON.stringify({
+          rows: importState.rows,
+          mapping: importState.mapping,
+          sequence_id: importState.sequenceId ? parseInt(importState.sequenceId) : undefined,
+        }),
       });
       const data = await res.json();
       if (data.error) {
@@ -246,18 +267,27 @@ export default function ContactsPage() {
   const resetImport = () => {
     setImportState({
       step: 'choose', headers: [], rows: [], mapping: {}, suggestions: {},
-      fieldLabels: {}, validFields: [], result: null, error: '',
+      fieldLabels: {}, validFields: [], result: null, error: '', sequenceId: '',
     });
     setSheetsUrl('');
   };
 
-  const filtered = contacts.filter(c =>
-    !search ||
-    c.name.toLowerCase().includes(search.toLowerCase()) ||
-    c.first_name?.toLowerCase().includes(search.toLowerCase()) ||
-    c.last_name?.toLowerCase().includes(search.toLowerCase()) ||
-    c.company.toLowerCase().includes(search.toLowerCase())
-  );
+  // Filtering
+  const sources = useMemo(() => Array.from(new Set(contacts.map(c => c.source).filter(Boolean))), [contacts]);
+
+  const filtered = useMemo(() => {
+    return contacts.filter(c => {
+      if (filterStatus !== 'all' && c.status !== filterStatus) return false;
+      if (filterSource !== 'all' && c.source !== filterSource) return false;
+      if (search) {
+        const q = search.toLowerCase();
+        if (!(c.name?.toLowerCase().includes(q) || c.first_name?.toLowerCase().includes(q) ||
+              c.last_name?.toLowerCase().includes(q) || c.company?.toLowerCase().includes(q) ||
+              c.title?.toLowerCase().includes(q))) return false;
+      }
+      return true;
+    });
+  }, [contacts, filterStatus, filterSource, search]);
 
   const displayName = (c: Contact) => {
     if (c.first_name || c.last_name) return [c.first_name, c.last_name].filter(Boolean).join(' ');
@@ -271,8 +301,25 @@ export default function ContactsPage() {
     Object.values(importState.mapping).includes('name')
   );
 
+  const allFilteredSelected = filtered.length > 0 && filtered.every(c => selectedIds.has(c.id));
+  const someSelected = selectedIds.size > 0;
+
+  const toggleSelectAll = () => {
+    if (allFilteredSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filtered.map(c => c.id)));
+    }
+  };
+
+  const toggleSelect = (id: number) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setSelectedIds(next);
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -299,31 +346,16 @@ export default function ContactsPage() {
                 <DialogTitle className="text-lg font-semibold">Add Contact</DialogTitle>
               </DialogHeader>
               <div className="space-y-3 mt-2">
-                {/* LinkedIn URL with lookup */}
                 <div>
                   <label className="text-xs font-medium text-muted-foreground mb-1.5 block">LinkedIn URL</label>
                   <div className="flex gap-2">
-                    <Input
-                      placeholder="https://linkedin.com/in/..."
-                      value={newContact.linkedin_url}
-                      onChange={(e) => setNewContact({ ...newContact, linkedin_url: e.target.value })}
-                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); lookupLinkedIn(newContact.linkedin_url); } }}
-                      className="bg-background/50 border-border h-10 flex-1"
-                    />
-                    <button
-                      onClick={() => lookupLinkedIn(newContact.linkedin_url)}
-                      disabled={lookingUp || !newContact.linkedin_url}
-                      className="px-3 h-10 rounded-lg bg-secondary border border-border text-xs font-medium text-muted-foreground hover:text-white hover:bg-accent disabled:opacity-40 transition-all shrink-0"
-                    >
-                      {lookingUp ? (
-                        <div className="w-4 h-4 border-2 border-muted-foreground/30 border-t-white rounded-full animate-spin" />
-                      ) : (
-                        'Lookup'
-                      )}
+                    <Input placeholder="https://linkedin.com/in/..." value={newContact.linkedin_url} onChange={(e) => setNewContact({ ...newContact, linkedin_url: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); lookupLinkedIn(newContact.linkedin_url); } }} className="bg-background/50 border-border h-10 flex-1" />
+                    <button onClick={() => lookupLinkedIn(newContact.linkedin_url)} disabled={lookingUp || !newContact.linkedin_url} className="px-3 h-10 rounded-lg bg-secondary border border-border text-xs font-medium text-muted-foreground hover:text-white hover:bg-accent disabled:opacity-40 transition-all shrink-0">
+                      {lookingUp ? <div className="w-4 h-4 border-2 border-muted-foreground/30 border-t-white rounded-full animate-spin" /> : 'Lookup'}
                     </button>
                   </div>
                   {lookupError && <p className="text-xs text-red-400 mt-1">{lookupError}</p>}
-                  <p className="text-[11px] text-muted-foreground mt-1">Paste a LinkedIn URL and click Lookup to auto-fill contact details</p>
+                  <p className="text-[11px] text-muted-foreground mt-1">Paste a LinkedIn URL and click Lookup to auto-fill</p>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <Input placeholder="First name" value={newContact.first_name} onChange={(e) => setNewContact({ ...newContact, first_name: e.target.value })} className="bg-background/50 border-border h-10" />
@@ -334,104 +366,124 @@ export default function ContactsPage() {
                 {sequencesList.length > 0 && (
                   <div>
                     <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Add to Sequence (optional)</label>
-                    <select
-                      value={newContact.sequence_id}
-                      onChange={(e) => setNewContact({ ...newContact, sequence_id: e.target.value })}
-                      className="w-full h-10 bg-background/50 text-white text-sm rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50"
-                    >
+                    <select value={newContact.sequence_id} onChange={(e) => setNewContact({ ...newContact, sequence_id: e.target.value })} className="w-full h-10 bg-background/50 text-white text-sm rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50">
                       <option value="">None</option>
-                      {sequencesList.map(s => (
-                        <option key={s.id} value={s.id}>{s.name}</option>
-                      ))}
+                      {sequencesList.map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}
                     </select>
                   </div>
                 )}
-                <button onClick={addContact} className="w-full h-10 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 transition-all">
-                  Add Contact
-                </button>
+                <button onClick={addContact} className="w-full h-10 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 transition-all">Add Contact</button>
               </div>
             </DialogContent>
           </Dialog>
         </div>
       </div>
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <input
-          placeholder="Search contacts..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full h-10 rounded-lg border border-border bg-card/50 text-white pl-10 pr-4 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-blue-500/50 transition-all"
-        />
+      {/* Filters + Search */}
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <input placeholder="Search contacts..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full h-9 rounded-lg border border-border bg-card/50 text-white pl-10 pr-4 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-blue-500/50 transition-all" />
+        </div>
+        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="h-9 bg-card/50 text-white text-xs rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50">
+          <option value="all">All Stages</option>
+          {FUNNEL_STAGES.map(s => (<option key={s.key} value={s.key}>{s.label}</option>))}
+        </select>
+        {sources.length > 1 && (
+          <select value={filterSource} onChange={(e) => setFilterSource(e.target.value)} className="h-9 bg-card/50 text-white text-xs rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50">
+            <option value="all">All Sources</option>
+            {sources.map(s => (<option key={s} value={s}>{s}</option>))}
+          </select>
+        )}
+        {(filterStatus !== 'all' || filterSource !== 'all') && (
+          <button onClick={() => { setFilterStatus('all'); setFilterSource('all'); }} className="text-xs text-muted-foreground hover:text-white transition-colors">
+            Clear
+          </button>
+        )}
+        <span className="text-xs text-muted-foreground">{filtered.length} shown</span>
       </div>
+
+      {/* Bulk actions bar */}
+      {someSelected && (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-blue-500/10 border border-blue-500/15 animate-fade-in">
+          <span className="text-sm text-blue-400 font-medium">{selectedIds.size} selected</span>
+          <div className="h-4 w-px bg-border" />
+          {sequencesList.length > 0 && (
+            <div className="flex items-center gap-2">
+              <GitBranch size={14} className="text-muted-foreground" />
+              <select value={bulkSequenceId} onChange={(e) => setBulkSequenceId(e.target.value)} className="h-8 bg-background/50 text-white text-xs rounded-lg px-2 border border-border focus:outline-none focus:border-blue-500/50">
+                <option value="">Select sequence...</option>
+                {sequencesList.map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}
+              </select>
+              <button onClick={bulkAssignSequence} disabled={!bulkSequenceId} className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-500 disabled:opacity-40 transition-all">
+                Add to Sequence
+              </button>
+            </div>
+          )}
+          <button onClick={() => setSelectedIds(new Set())} className="ml-auto text-xs text-muted-foreground hover:text-white transition-colors">
+            Deselect all
+          </button>
+        </div>
+      )}
 
       {/* Contact list */}
       {loading ? (
         <div className="space-y-2">
-          {[...Array(5)].map((_, i) => <div key={i} className="h-20 bg-secondary rounded-xl animate-pulse" />)}
+          {[...Array(5)].map((_, i) => <div key={i} className="h-16 bg-secondary rounded-xl animate-pulse" />)}
         </div>
       ) : filtered.length === 0 ? (
         <div className="py-16 text-center">
           <Users className="w-10 h-10 text-muted-foreground/20 mx-auto mb-3" />
-          <p className="text-muted-foreground">{search ? 'No contacts match your search' : 'No contacts yet'}</p>
+          <p className="text-muted-foreground">{search || filterStatus !== 'all' ? 'No contacts match your filters' : 'No contacts yet'}</p>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-1.5">
+          {/* Select all header */}
+          <div className="flex items-center gap-3 px-4 py-1.5">
+            <input type="checkbox" checked={allFilteredSelected} onChange={toggleSelectAll} className="w-4 h-4 rounded border-border bg-background accent-blue-600 cursor-pointer" />
+            <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Select all</span>
+          </div>
           {filtered.map((contact) => {
             const cfg = getStatusDisplay(contact.status);
+            const isSelected = selectedIds.has(contact.id);
             return (
-              <div key={contact.id} className="glass glass-hover rounded-xl p-4 flex items-center justify-between">
-                <div className="flex items-center gap-4 min-w-0">
-                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500/15 to-indigo-500/15 border border-blue-500/10 flex items-center justify-center text-xs font-semibold text-blue-300 shrink-0">
-                    {(contact.first_name || contact.name || '?').charAt(0)}
+              <div key={contact.id} className={`glass rounded-xl p-3.5 flex items-center gap-3 transition-all ${isSelected ? 'border-blue-500/30 bg-blue-500/5' : 'glass-hover'}`}>
+                <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(contact.id)} className="w-4 h-4 rounded border-border bg-background accent-blue-600 cursor-pointer shrink-0" />
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500/15 to-indigo-500/15 border border-blue-500/10 flex items-center justify-center text-xs font-semibold text-blue-300 shrink-0">
+                  {(contact.first_name || contact.name || '?').charAt(0)}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium text-white truncate">{displayName(contact)}</p>
+                    {contact.linkedin_url && (
+                      <a href={contact.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 shrink-0"><ExternalLink size={11} /></a>
+                    )}
                   </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-white truncate">{displayName(contact)}</p>
-                      {contact.linkedin_url && (
-                        <a href={contact.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 shrink-0">
-                          <ExternalLink size={12} />
-                        </a>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {contact.title}{contact.title && contact.company ? ' at ' : ''}{contact.company}
-                    </p>
-                  </div>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {contact.title}{contact.title && contact.company ? ' at ' : ''}{contact.company}
+                  </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md ${cfg.bg}`}>
+                  <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-md ${cfg.bg}`}>
                     <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
                     {cfg.label}
                   </span>
                   {sequencesList.length > 0 && !['queued', 'opted_out'].includes(contact.status) && (
-                    <select
-                      defaultValue=""
-                      onChange={(e) => { if (e.target.value) assignSequence(contact.id, parseInt(e.target.value)); }}
-                      className="h-8 bg-secondary/50 text-white text-xs rounded-lg px-2 border border-border focus:outline-none focus:border-blue-500/50 cursor-pointer"
-                    >
-                      <option value="">+ Sequence</option>
-                      {sequencesList.map(s => (
-                        <option key={s.id} value={s.id}>{s.name}</option>
-                      ))}
+                    <select defaultValue="" onChange={(e) => { if (e.target.value) assignSequence(contact.id, parseInt(e.target.value)); }} className="h-7 bg-secondary/50 text-white text-[11px] rounded-lg px-1.5 border border-border focus:outline-none focus:border-blue-500/50 cursor-pointer">
+                      <option value="">+ Seq</option>
+                      {sequencesList.map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}
                     </select>
                   )}
                   <Select value={contact.status} onValueChange={(v) => { if (v) updateStatus(contact.id, v); }}>
-                    <SelectTrigger className="w-36 h-8 bg-secondary/50 border-border text-xs">
+                    <SelectTrigger className="w-32 h-7 bg-secondary/50 border-border text-[11px]">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {FUNNEL_STAGES.map(s => (
-                        <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
-                      ))}
+                      {FUNNEL_STAGES.map(s => (<SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>))}
                     </SelectContent>
                   </Select>
-                  <button
-                    onClick={() => deleteContact(contact.id)}
-                    className="p-1.5 rounded-md text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-all"
-                  >
-                    <Trash2 size={14} />
+                  <button onClick={() => deleteContact(contact.id)} className="p-1 rounded-md text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-all">
+                    <Trash2 size={13} />
                   </button>
                 </div>
               </div>
@@ -461,114 +513,61 @@ export default function ContactsPage() {
             </div>
           )}
 
-          {/* Step: Choose source */}
           {importState.step === 'choose' && (
             <div className="space-y-3 mt-2">
-              <button
-                onClick={() => setImportState(s => ({ ...s, step: 'csv-upload' }))}
-                className="w-full flex items-center gap-4 p-4 rounded-xl bg-secondary/50 border border-border hover:bg-secondary hover:border-border/80 transition-all text-left"
-              >
-                <div className="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/15 flex items-center justify-center shrink-0">
-                  <FileSpreadsheet size={18} className="text-emerald-400" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-white">CSV File</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Upload a .csv file from your computer</p>
-                </div>
+              <button onClick={() => setImportState(s => ({ ...s, step: 'csv-upload' }))} className="w-full flex items-center gap-4 p-4 rounded-xl bg-secondary/50 border border-border hover:bg-secondary hover:border-border/80 transition-all text-left">
+                <div className="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/15 flex items-center justify-center shrink-0"><FileSpreadsheet size={18} className="text-emerald-400" /></div>
+                <div><p className="text-sm font-medium text-white">CSV File</p><p className="text-xs text-muted-foreground mt-0.5">Upload a .csv file</p></div>
               </button>
-              <button
-                onClick={() => setImportState(s => ({ ...s, step: 'sheets-url' }))}
-                className="w-full flex items-center gap-4 p-4 rounded-xl bg-secondary/50 border border-border hover:bg-secondary hover:border-border/80 transition-all text-left"
-              >
-                <div className="w-10 h-10 rounded-lg bg-blue-500/10 border border-blue-500/15 flex items-center justify-center shrink-0">
-                  <Link2 size={18} className="text-blue-400" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-white">Google Sheets</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Paste a public Google Sheets link</p>
-                </div>
+              <button onClick={() => setImportState(s => ({ ...s, step: 'sheets-url' }))} className="w-full flex items-center gap-4 p-4 rounded-xl bg-secondary/50 border border-border hover:bg-secondary hover:border-border/80 transition-all text-left">
+                <div className="w-10 h-10 rounded-lg bg-blue-500/10 border border-blue-500/15 flex items-center justify-center shrink-0"><Link2 size={18} className="text-blue-400" /></div>
+                <div><p className="text-sm font-medium text-white">Google Sheets</p><p className="text-xs text-muted-foreground mt-0.5">Paste a public link</p></div>
               </button>
-              <button
-                onClick={importFromPipedrive}
-                disabled={importing}
-                className="w-full flex items-center gap-4 p-4 rounded-xl bg-secondary/50 border border-border hover:bg-secondary hover:border-border/80 transition-all text-left disabled:opacity-50"
-              >
-                <div className="w-10 h-10 rounded-lg bg-violet-500/10 border border-violet-500/15 flex items-center justify-center shrink-0">
-                  <Upload size={18} className="text-violet-400" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-white">{importing ? 'Importing...' : 'Pipedrive'}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Sync contacts from your Pipedrive CRM</p>
-                </div>
+              <button onClick={importFromPipedrive} disabled={importing} className="w-full flex items-center gap-4 p-4 rounded-xl bg-secondary/50 border border-border hover:bg-secondary hover:border-border/80 transition-all text-left disabled:opacity-50">
+                <div className="w-10 h-10 rounded-lg bg-violet-500/10 border border-violet-500/15 flex items-center justify-center shrink-0"><Upload size={18} className="text-violet-400" /></div>
+                <div><p className="text-sm font-medium text-white">{importing ? 'Importing...' : 'Pipedrive'}</p><p className="text-xs text-muted-foreground mt-0.5">Sync from CRM</p></div>
               </button>
             </div>
           )}
 
-          {/* Step: CSV upload */}
           {importState.step === 'csv-upload' && (
             <div className="space-y-4 mt-2">
               <label className="block w-full cursor-pointer">
                 <div className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-blue-500/30 transition-all">
                   <FileSpreadsheet className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
                   <p className="text-sm text-white font-medium">Click to select a CSV file</p>
-                  <p className="text-xs text-muted-foreground mt-1">or drag and drop</p>
                 </div>
                 <input type="file" accept=".csv" onChange={handleCsvFile} className="hidden" />
               </label>
-              <button onClick={() => setImportState(s => ({ ...s, step: 'choose' }))} className="text-sm text-muted-foreground hover:text-white transition-colors">
-                Back
-              </button>
+              <button onClick={() => setImportState(s => ({ ...s, step: 'choose' }))} className="text-sm text-muted-foreground hover:text-white transition-colors">Back</button>
             </div>
           )}
 
-          {/* Step: Google Sheets URL */}
           {importState.step === 'sheets-url' && (
             <div className="space-y-4 mt-2">
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Google Sheets URL</label>
-                <Input
-                  placeholder="https://docs.google.com/spreadsheets/d/..."
-                  value={sheetsUrl}
-                  onChange={(e) => setSheetsUrl(e.target.value)}
-                  className="bg-background/50 border-border h-10"
-                />
-                <p className="text-xs text-muted-foreground mt-1.5">The sheet must be publicly accessible (File &gt; Share &gt; Anyone with the link)</p>
+                <Input placeholder="https://docs.google.com/spreadsheets/d/..." value={sheetsUrl} onChange={(e) => setSheetsUrl(e.target.value)} className="bg-background/50 border-border h-10" />
+                <p className="text-xs text-muted-foreground mt-1.5">Sheet must be publicly accessible</p>
               </div>
-              <button
-                onClick={handleSheetsImport}
-                disabled={!sheetsUrl}
-                className="w-full h-10 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 disabled:opacity-40 transition-all"
-              >
-                Fetch Sheet
-              </button>
-              <button onClick={() => setImportState(s => ({ ...s, step: 'choose', error: '' }))} className="text-sm text-muted-foreground hover:text-white transition-colors">
-                Back
-              </button>
+              <button onClick={handleSheetsImport} disabled={!sheetsUrl} className="w-full h-10 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 disabled:opacity-40 transition-all">Fetch Sheet</button>
+              <button onClick={() => setImportState(s => ({ ...s, step: 'choose', error: '' }))} className="text-sm text-muted-foreground hover:text-white transition-colors">Back</button>
             </div>
           )}
 
-          {/* Step: Column mapping */}
           {importState.step === 'mapping' && (
             <div className="space-y-4 mt-2">
               <p className="text-sm text-muted-foreground">
-                Found <span className="text-white font-medium">{importState.rows.length}</span> rows and <span className="text-white font-medium">{importState.headers.length}</span> columns. Map your columns to contact fields:
+                <span className="text-white font-medium">{importState.rows.length}</span> rows, <span className="text-white font-medium">{importState.headers.length}</span> columns. Map to contact fields:
               </p>
-              <div className="space-y-2 max-h-[300px] overflow-auto">
+              <div className="space-y-2 max-h-[250px] overflow-auto">
                 {importState.headers.map((header) => (
                   <div key={header} className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50 border border-border/50">
                     <span className="text-sm text-white font-medium w-40 truncate shrink-0" title={header}>{header}</span>
                     <ArrowRight size={14} className="text-muted-foreground shrink-0" />
-                    <select
-                      value={importState.mapping[header] || ''}
-                      onChange={(e) => setImportState(s => ({
-                        ...s, mapping: { ...s.mapping, [header]: e.target.value }
-                      }))}
-                      className="flex-1 h-8 bg-background/50 text-white text-sm rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50"
-                    >
-                      <option value="">Skip this column</option>
-                      {importState.validFields.map(f => (
-                        <option key={f} value={f}>{importState.fieldLabels[f] || f}</option>
-                      ))}
+                    <select value={importState.mapping[header] || ''} onChange={(e) => setImportState(s => ({ ...s, mapping: { ...s.mapping, [header]: e.target.value } }))} className="flex-1 h-8 bg-background/50 text-white text-sm rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50">
+                      <option value="">Skip</option>
+                      {importState.validFields.map(f => (<option key={f} value={f}>{importState.fieldLabels[f] || f}</option>))}
                     </select>
                     {importState.suggestions[header] && importState.mapping[header] === importState.suggestions[header] && (
                       <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
@@ -579,25 +578,28 @@ export default function ContactsPage() {
               {!hasNameMapping && (
                 <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
                   <AlertCircle size={14} className="text-amber-400 shrink-0" />
-                  <p className="text-amber-400 text-sm">Map at least a First Name, Last Name, or Full Name column</p>
+                  <p className="text-amber-400 text-sm">Map at least a name column</p>
+                </div>
+              )}
+              {/* Sequence on import */}
+              {sequencesList.length > 0 && (
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Add to Sequence after import (optional)</label>
+                  <select value={importState.sequenceId} onChange={(e) => setImportState(s => ({ ...s, sequenceId: e.target.value }))} className="w-full h-9 bg-background/50 text-white text-sm rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50">
+                    <option value="">None — import only</option>
+                    {sequencesList.map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}
+                  </select>
                 </div>
               )}
               <div className="flex gap-3">
-                <button
-                  onClick={executeImport}
-                  disabled={!hasNameMapping}
-                  className="flex-1 h-10 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 disabled:opacity-40 transition-all"
-                >
-                  Import {importState.rows.length} Contacts ({mappedFieldCount} fields mapped)
+                <button onClick={executeImport} disabled={!hasNameMapping} className="flex-1 h-10 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 disabled:opacity-40 transition-all">
+                  Import {importState.rows.length} Contacts
                 </button>
-                <button onClick={resetImport} className="px-4 h-10 rounded-lg text-sm text-muted-foreground hover:text-white hover:bg-secondary transition-all">
-                  Back
-                </button>
+                <button onClick={resetImport} className="px-4 h-10 rounded-lg text-sm text-muted-foreground hover:text-white hover:bg-secondary transition-all">Back</button>
               </div>
             </div>
           )}
 
-          {/* Step: Importing */}
           {importState.step === 'importing' && (
             <div className="py-8 text-center">
               <div className="w-8 h-8 border-2 border-blue-400/30 border-t-blue-400 rounded-full animate-spin mx-auto mb-3" />
@@ -605,19 +607,12 @@ export default function ContactsPage() {
             </div>
           )}
 
-          {/* Step: Done */}
           {importState.step === 'done' && importState.result && (
             <div className="py-6 text-center">
               <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-3" />
-              <p className="text-white font-medium">
-                Imported {importState.result.imported} of {importState.result.total} contacts
-              </p>
-              <button
-                onClick={() => { setShowImport(false); resetImport(); }}
-                className="mt-4 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 transition-all"
-              >
-                Done
-              </button>
+              <p className="text-white font-medium">Imported {importState.result.imported} of {importState.result.total} contacts</p>
+              {importState.sequenceId && <p className="text-sm text-muted-foreground mt-1">Added to sequence</p>}
+              <button onClick={() => { setShowImport(false); resetImport(); }} className="mt-4 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 transition-all">Done</button>
             </div>
           )}
         </DialogContent>
