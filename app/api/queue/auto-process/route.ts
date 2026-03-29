@@ -100,8 +100,42 @@ export async function POST(req: NextRequest) {
 
           const profile = await profileRes.json();
           const providerId = profile.provider_id || profile.id;
+          const alreadyConnected = profile.is_relationship === true || profile.network_distance === 'FIRST_DEGREE';
 
           if (item.action_type === 'connection') {
+            // Skip connection request if already connected
+            if (alreadyConnected) {
+              console.log(`SKIP invite for ${item.contact_name} — already connected`);
+              queue.updateStatus(item.id, 'completed', user.id);
+              contacts.updateStatus(item.contact_id, 'connected', user.id);
+
+              // If there's a next step in the sequence, schedule it immediately
+              if (item.sequence_id && item.sequence_steps) {
+                const steps = typeof item.sequence_steps === 'string' ? JSON.parse(item.sequence_steps) : item.sequence_steps;
+                const nextStepIdx = item.step_number;
+                if (nextStepIdx < steps.length) {
+                  const nextStep = steps[nextStepIdx];
+                  const contact = {
+                    first_name: item.first_name, last_name: item.last_name,
+                    name: item.contact_name, company: item.company, title: item.title,
+                  };
+                  const nextMessage = nextStep.template
+                    ? substituteVariables(nextStep.template, contact)
+                    : '';
+                  queue.create(user.id, {
+                    contact_id: item.contact_id,
+                    sequence_id: item.sequence_id,
+                    step_number: item.step_number + 1,
+                    action_type: nextStep.action,
+                    message_text: nextMessage,
+                    scheduled_at: new Date(Date.now() + (nextStep.delay_hours || 0) * 3600000).toISOString(),
+                  });
+                }
+              }
+              processed.push(item.id);
+              continue;
+            }
+
             const res = await fetch(`${baseUrl}/users/invite`, {
               method: 'POST',
               headers: apiHeaders,
