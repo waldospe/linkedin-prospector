@@ -254,6 +254,11 @@ export default function ContactsPage() {
           sequence_id: importState.sequenceId ? parseInt(importState.sequenceId) : undefined,
         }),
       });
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        setImportState(s => ({ ...s, step: 'mapping', error: `Server error (${res.status}). Try again or reduce the number of rows.` }));
+        return;
+      }
       const data = await res.json();
       if (data.error) {
         setImportState(s => ({ ...s, step: 'mapping', error: data.error }));

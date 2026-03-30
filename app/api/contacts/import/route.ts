@@ -26,10 +26,13 @@ function normalizeHeader(header: string): string | null {
 // POST: Preview/validate headers for CSV or Google Sheets data
 // Body: { headers: string[] } -> returns suggested mapping
 // Or: { rows: Array<Record<string, string>>, mapping: Record<string, string> } -> imports data
+export const maxDuration = 60; // allow up to 60s for large imports
+
 export async function POST(req: NextRequest) {
   try {
     const { effectiveUserId, userId: authUserId } = getEffectiveUser(req);
     const userId = effectiveUserId || authUserId;
+    console.log('IMPORT: userId =', userId, 'effectiveUserId =', effectiveUserId);
     const body = await req.json();
 
     // Step 1: Header validation - return suggested mapping
