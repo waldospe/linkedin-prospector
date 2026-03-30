@@ -73,6 +73,26 @@ export async function POST(req: NextRequest) {
         if (processed.length >= remaining) break;
 
         try {
+          // Pre-check: if this is a connection request, check contact status in our DB first
+          // This avoids unnecessary API calls and doesn't count toward daily limit
+          if (item.action_type === 'connection') {
+            const contactStatus = (contacts.getById(item.contact_id, user.id) as any)?.status;
+            if (contactStatus === 'invite_sent' || contactStatus === 'invite_pending') {
+              // Already have a pending invite — skip, don't count
+              console.log(`SKIP ${item.contact_name} — invite already pending (${contactStatus})`);
+              queue.updateStatus(item.id, 'completed', user.id);
+              skipped.push(item.id);
+              continue;
+            }
+            if (contactStatus === 'connected' || contactStatus === 'msg_sent' || contactStatus === 'replied' || contactStatus === 'engaged') {
+              // Already connected — skip entire connection sequence
+              console.log(`SKIP ${item.contact_name} — already ${contactStatus}`);
+              queue.updateStatus(item.id, 'completed', user.id);
+              skipped.push(item.id);
+              continue;
+            }
+          }
+
           const contact = {
             first_name: item.first_name,
             last_name: item.last_name,
