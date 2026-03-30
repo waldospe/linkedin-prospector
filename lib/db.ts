@@ -419,7 +419,7 @@ export const contacts = {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'new')
     `);
     const tx = getDb().transaction((items: typeof rows) => {
-      let count = 0;
+      const ids: number[] = [];
       for (const data of items) {
         let fn = data.first_name || '';
         let ln = data.last_name || '';
@@ -431,11 +431,11 @@ export const contacts = {
         } else if (!fullName) {
           fullName = [fn, ln].filter(Boolean).join(' ');
         }
-        if (!fn && !ln && !fullName) continue; // skip empty rows
-        insert.run(userId, fn, ln, fullName, data.linkedin_url || '', data.company || '', data.title || '', data.source || 'import');
-        count++;
+        if (!fn && !ln && !fullName) continue;
+        const result = insert.run(userId, fn, ln, fullName, data.linkedin_url || '', data.company || '', data.title || '', data.source || 'import');
+        ids.push(result.lastInsertRowid as number);
       }
-      return count;
+      return ids;
     });
     return tx(rows);
   },

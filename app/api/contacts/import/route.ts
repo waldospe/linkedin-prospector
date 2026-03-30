@@ -3,6 +3,10 @@ import { getEffectiveUser } from '@/lib/api-auth';
 import { contacts, sequences, queue } from '@/lib/db';
 import { normalizeLinkedInUrl, isValidLinkedInUrl, substituteVariables } from '@/lib/constants';
 
+// Allow large request bodies for CSV imports (up to 10MB)
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
+
 // Known contact fields and common CSV header aliases
 const FIELD_ALIASES: Record<string, string[]> = {
   first_name: ['first_name', 'firstname', 'first name', 'first', 'fname', 'given name'],
@@ -26,8 +30,6 @@ function normalizeHeader(header: string): string | null {
 // POST: Preview/validate headers for CSV or Google Sheets data
 // Body: { headers: string[] } -> returns suggested mapping
 // Or: { rows: Array<Record<string, string>>, mapping: Record<string, string> } -> imports data
-export const maxDuration = 60; // allow up to 60s for large imports
-
 export async function POST(req: NextRequest) {
   try {
     const { effectiveUserId, userId: authUserId } = getEffectiveUser(req);
@@ -85,7 +87,8 @@ export async function POST(req: NextRequest) {
         return contact;
       }).filter((c) => c.first_name || c.last_name || c.name); // skip empty
 
-      const count = contacts.bulkCreate(userId, mapped);
+      const insertedIds = contacts.bulkCreate(userId, mapped);
+      const count = insertedIds.length;
 
       // Assign to sequence if specified
       let sequenced = 0;
@@ -94,21 +97,20 @@ export async function POST(req: NextRequest) {
         if (seq) {
           const steps = typeof seq.steps === 'string' ? JSON.parse(seq.steps) : seq.steps;
           if (steps.length > 0) {
-            // Get the newly created contacts (last N by created_at)
-            const allContacts = contacts.getAll(userId) as any[];
-            const newContacts = allContacts.slice(0, count); // getAll returns DESC by created_at
-            for (const c of newContacts) {
+            for (const contactId of insertedIds) {
+              const c = contacts.getById(contactId, userId) as any;
+              if (!c) continue;
               const messageText = steps[0].template
                 ? substituteVariables(steps[0].template, c)
                 : '';
               queue.create(userId, {
-                contact_id: c.id,
+                contact_id: contactId,
                 sequence_id: body.sequence_id,
                 step_number: 1,
                 action_type: steps[0].action,
                 message_text: messageText,
               });
-              contacts.updateStatus(c.id, 'queued', userId);
+              contacts.updateStatus(contactId, 'queued', userId);
               sequenced++;
             }
           }

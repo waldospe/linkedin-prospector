@@ -245,25 +245,51 @@ export default function ContactsPage() {
   const executeImport = async () => {
     setImportState(s => ({ ...s, step: 'importing' }));
     try {
-      const res = await fetch(`/api/contacts/import${apiQuery}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          rows: importState.rows,
-          mapping: importState.mapping,
-          sequence_id: importState.sequenceId ? parseInt(importState.sequenceId) : undefined,
-        }),
-      });
-      const contentType = res.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        setImportState(s => ({ ...s, step: 'mapping', error: `Server error (${res.status}). Try again or reduce the number of rows.` }));
-        return;
+      const allRows = importState.rows;
+      const CHUNK_SIZE = 200;
+      let totalImported = 0;
+      let totalInvalid = 0;
+      let totalSequenced = 0;
+      const errors: string[] = [];
+
+      // Send in chunks of 200 rows to avoid body size limits
+      for (let i = 0; i < allRows.length; i += CHUNK_SIZE) {
+        const chunk = allRows.slice(i, i + CHUNK_SIZE);
+        const isLastChunk = i + CHUNK_SIZE >= allRows.length;
+
+        const res = await fetch(`/api/contacts/import${apiQuery}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            rows: chunk,
+            mapping: importState.mapping,
+            sequence_id: importState.sequenceId ? parseInt(importState.sequenceId) : undefined,
+          }),
+        });
+
+        const contentType = res.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+          errors.push(`Chunk ${Math.floor(i / CHUNK_SIZE) + 1} failed (${res.status})`);
+          continue;
+        }
+
+        const data = await res.json();
+        if (data.error) {
+          errors.push(data.error);
+        } else {
+          totalImported += data.imported || 0;
+          totalInvalid += data.invalidUrls || 0;
+          totalSequenced += data.sequenced || 0;
+        }
       }
-      const data = await res.json();
-      if (data.error) {
-        setImportState(s => ({ ...s, step: 'mapping', error: data.error }));
+
+      if (errors.length > 0 && totalImported === 0) {
+        setImportState(s => ({ ...s, step: 'mapping', error: errors.join('. ') }));
       } else {
-        setImportState(s => ({ ...s, step: 'done', result: data }));
+        setImportState(s => ({
+          ...s, step: 'done',
+          result: { imported: totalImported, total: allRows.length },
+        }));
         fetchContacts();
       }
     } catch (err: any) {
