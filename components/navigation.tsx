@@ -39,6 +39,12 @@ export default function Navigation() {
     router.refresh();
   };
 
+  // Redirect to onboarding if user has no team (and not already on onboarding page)
+  if (currentUser && !currentUser.team_id && pathname !== '/onboarding') {
+    router.push('/onboarding');
+    return null;
+  }
+
   if (loading || !currentUser) {
     return (
       <nav className="w-[240px] min-h-screen bg-[hsl(228,14%,9%)] border-r border-[hsl(228,11%,15%)] p-4">

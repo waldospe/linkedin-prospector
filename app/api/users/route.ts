@@ -60,10 +60,14 @@ export async function PUT(req: NextRequest) {
       if (targetId !== userId) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
       }
-      // Non-admins cannot change role, team_id, or unipile_account_id
+      // Non-admins cannot change role or unipile_account_id
+      // But they CAN set team_id if they don't have one yet (onboarding)
       delete data.role;
-      delete data.team_id;
       delete data.unipile_account_id;
+      const currentUserData = users.getById(userId) as any;
+      if (currentUserData?.team_id) {
+        delete data.team_id; // already has a team, can't change it
+      }
     }
 
     users.update(targetId, data);

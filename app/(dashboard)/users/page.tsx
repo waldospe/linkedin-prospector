@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Input } from '@/components/ui/input';
 import { useUser } from '@/components/user-context';
-import { Plus, Trash2, User, Linkedin, Key, Save, UserCog, X } from 'lucide-react';
+import { Plus, Trash2, User, Linkedin, Key, Save, UserCog, X, Users as UsersIcon } from 'lucide-react';
 
 interface UserType {
   id: number;
@@ -38,16 +38,36 @@ export default function UsersPage() {
   const { isAdmin, currentUser } = useUser();
   const [users, setUsers] = useState<UserType[]>([]);
   const [loading, setLoading] = useState(true);
-  const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'user' });
+  const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'user', team_id: '' });
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editFields, setEditFields] = useState<Record<string, any>>({});
   const [message, setMessage] = useState('');
+  const [teamsList, setTeamsList] = useState<Array<{ id: number; name: string }>>([]);
+  const [newTeamName, setNewTeamName] = useState('');
 
   useEffect(() => {
     if (!isAdmin) { router.push('/'); return; }
     fetchUsers();
+    fetchTeams();
   }, [isAdmin]);
+
+  const fetchTeams = async () => {
+    const res = await fetch('/api/teams');
+    const data = await res.json();
+    if (Array.isArray(data)) setTeamsList(data);
+  };
+
+  const createTeam = async () => {
+    if (!newTeamName.trim()) return;
+    await fetch('/api/teams', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newTeamName.trim() }),
+    });
+    setNewTeamName('');
+    fetchTeams();
+    showMsg('Team created');
+  };
 
   const fetchUsers = async () => {
     const res = await fetch('/api/users');
@@ -58,12 +78,13 @@ export default function UsersPage() {
 
   const createUser = async () => {
     if (!newUser.name || !newUser.email || !newUser.password) return;
+    const teamId = newUser.team_id ? parseInt(newUser.team_id) : currentUser?.team_id;
     const res = await fetch('/api/users', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...newUser, team_id: currentUser?.team_id }),
+      body: JSON.stringify({ ...newUser, team_id: teamId }),
     });
     if (res.ok) {
-      setNewUser({ name: '', email: '', password: '', role: 'user' });
+      setNewUser({ name: '', email: '', password: '', role: 'user', team_id: '' });
       setShowAddForm(false);
       fetchUsers();
       showMsg('User created');
@@ -166,12 +187,42 @@ export default function UsersPage() {
                 <option value="admin">Admin</option>
               </select>
             </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Team</label>
+              <select value={newUser.team_id} onChange={(e) => setNewUser({ ...newUser, team_id: e.target.value })} className="w-full h-10 bg-background/50 text-white text-sm rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50">
+                <option value="">Default (your team)</option>
+                {teamsList.map(t => (<option key={t.id} value={t.id}>{t.name}</option>))}
+              </select>
+            </div>
           </div>
           <button onClick={createUser} className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 transition-all">
             <Plus size={14} /> Create User
           </button>
         </div>
       )}
+
+      {/* Team management */}
+      <div className="glass rounded-xl p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <UsersIcon size={16} className="text-muted-foreground" />
+            <span className="text-sm font-medium text-white">Teams</span>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2 mb-3">
+          {teamsList.map(t => (
+            <span key={t.id} className="text-xs font-medium px-3 py-1.5 rounded-lg bg-secondary border border-border text-white">
+              {t.name}
+            </span>
+          ))}
+        </div>
+        <div className="flex gap-2 max-w-xs">
+          <Input placeholder="New team name" value={newTeamName} onChange={(e) => setNewTeamName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && createTeam()} className="bg-background/50 border-border h-8 text-sm" />
+          <button onClick={createTeam} disabled={!newTeamName.trim()} className="px-3 h-8 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-500 disabled:opacity-40 transition-all shrink-0">
+            <Plus size={12} />
+          </button>
+        </div>
+      </div>
 
       {/* User list */}
       {loading ? (
@@ -194,6 +245,11 @@ export default function UsersPage() {
                           ? 'text-blue-400 bg-blue-500/10 border-blue-500/15'
                           : 'text-muted-foreground bg-secondary border-border/50'
                       }`}>{user.role}</span>
+                      {user.team_id && (
+                        <span className="text-[10px] font-medium px-2 py-0.5 rounded-md border text-cyan-400 bg-cyan-500/10 border-cyan-500/15">
+                          {teamsList.find(t => t.id === user.team_id)?.name || `Team ${user.team_id}`}
+                        </span>
+                      )}
                       <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-md border ${
                         user.unipile_account_id
                           ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/15'
