@@ -200,18 +200,11 @@ export default function ContactsPage() {
     const reader = new FileReader();
     reader.onload = async (ev) => {
       const text = ev.target?.result as string;
-      const lines = text.split(/\r?\n/).filter(l => l.trim());
-      if (lines.length < 2) {
+      const { headers, rows } = parseCsvFull(text);
+      if (headers.length === 0 || rows.length === 0) {
         setImportState(s => ({ ...s, error: 'CSV file is empty or has no data rows' }));
         return;
       }
-      const headers = parseCsvLine(lines[0]);
-      const rows = lines.slice(1).map(line => {
-        const values = parseCsvLine(line);
-        const row: Record<string, string> = {};
-        headers.forEach((h, i) => { row[h] = values[i] || ''; });
-        return row;
-      });
       await validateHeaders(headers, rows);
     };
     reader.readAsText(file);
@@ -719,22 +712,56 @@ export default function ContactsPage() {
   );
 }
 
-function parseCsvLine(line: string): string[] {
-  const result: string[] = [];
-  let current = '';
+// Full CSV parser that handles multi-line quoted fields (e.g. companyDescription with line breaks)
+function parseCsvFull(text: string): { headers: string[]; rows: Array<Record<string, string>> } {
+  const rows: string[][] = [];
+  let currentRow: string[] = [];
+  let currentField = '';
   let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+
     if (inQuotes) {
-      if (char === '"' && line[i + 1] === '"') { current += '"'; i++; }
-      else if (char === '"') { inQuotes = false; }
-      else { current += char; }
+      if (char === '"' && text[i + 1] === '"') {
+        currentField += '"';
+        i++;
+      } else if (char === '"') {
+        inQuotes = false;
+      } else {
+        currentField += char;
+      }
     } else {
-      if (char === '"') { inQuotes = true; }
-      else if (char === ',') { result.push(current.trim()); current = ''; }
-      else { current += char; }
+      if (char === '"') {
+        inQuotes = true;
+      } else if (char === ',') {
+        currentRow.push(currentField.trim());
+        currentField = '';
+      } else if (char === '\n' || (char === '\r' && text[i + 1] === '\n')) {
+        if (char === '\r') i++; // skip \r in \r\n
+        currentRow.push(currentField.trim());
+        currentField = '';
+        if (currentRow.some(f => f)) rows.push(currentRow); // skip fully empty rows
+        currentRow = [];
+      } else {
+        currentField += char;
+      }
     }
   }
-  result.push(current.trim());
-  return result;
+  // Last field/row
+  if (currentField || currentRow.length > 0) {
+    currentRow.push(currentField.trim());
+    if (currentRow.some(f => f)) rows.push(currentRow);
+  }
+
+  if (rows.length < 2) return { headers: [], rows: [] };
+
+  const headers = rows[0];
+  const dataRows = rows.slice(1).map(values => {
+    const row: Record<string, string> = {};
+    headers.forEach((h, j) => { row[h] = values[j] || ''; });
+    return row;
+  });
+
+  return { headers, rows: dataRows };
 }
