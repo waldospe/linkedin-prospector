@@ -249,6 +249,7 @@ export default function ContactsPage() {
       const CHUNK_SIZE = 200;
       let totalImported = 0;
       let totalInvalid = 0;
+      let totalDuplicates = 0;
       let totalSequenced = 0;
       const errors: string[] = [];
 
@@ -279,6 +280,7 @@ export default function ContactsPage() {
         } else {
           totalImported += data.imported || 0;
           totalInvalid += data.invalidUrls || 0;
+          totalDuplicates += data.duplicates || 0;
           totalSequenced += data.sequenced || 0;
         }
       }
@@ -288,7 +290,7 @@ export default function ContactsPage() {
       } else {
         setImportState(s => ({
           ...s, step: 'done',
-          result: { imported: totalImported, total: allRows.length },
+          result: { imported: totalImported, total: allRows.length, duplicates: totalDuplicates, invalidUrls: totalInvalid } as any,
         }));
         fetchContacts();
       }
@@ -644,7 +646,11 @@ export default function ContactsPage() {
             <div className="py-6 text-center">
               <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-3" />
               <p className="text-white font-medium">Imported {importState.result.imported} of {importState.result.total} contacts</p>
-              {importState.sequenceId && <p className="text-sm text-muted-foreground mt-1">Added to sequence</p>}
+              <div className="text-sm text-muted-foreground mt-2 space-y-0.5">
+                {(importState.result as any).duplicates > 0 && <p>{(importState.result as any).duplicates} duplicates skipped</p>}
+                {(importState.result as any).invalidUrls > 0 && <p>{(importState.result as any).invalidUrls} invalid LinkedIn URLs</p>}
+                {importState.sequenceId && <p>Added to sequence</p>}
+              </div>
               <button onClick={() => { setShowImport(false); resetImport(); }} className="mt-4 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 transition-all">Done</button>
             </div>
           )}

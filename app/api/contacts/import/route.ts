@@ -9,21 +9,39 @@ export const maxDuration = 60;
 
 // Known contact fields and common CSV header aliases
 const FIELD_ALIASES: Record<string, string[]> = {
-  first_name: ['first_name', 'firstname', 'first name', 'first', 'fname', 'given name'],
-  last_name: ['last_name', 'lastname', 'last name', 'last', 'lname', 'surname', 'family name'],
-  name: ['name', 'full name', 'fullname', 'full_name', 'contact name', 'contact'],
-  linkedin_url: ['linkedin_url', 'linkedin url', 'linkedin', 'linkedin profile', 'profile url', 'profile_url', 'linkedin link'],
-  company: ['company', 'company name', 'organization', 'org', 'employer', 'company_name'],
-  title: ['title', 'job title', 'job_title', 'position', 'role', 'job role'],
+  first_name: ['first_name', 'firstname', 'first name', 'first', 'fname', 'given name', 'givenname'],
+  last_name: ['last_name', 'lastname', 'last name', 'last', 'lname', 'surname', 'family name', 'familyname'],
+  name: ['name', 'full name', 'fullname', 'full_name', 'contact name', 'contact', 'person', 'person name'],
+  linkedin_url: ['linkedin_url', 'linkedin url', 'linkedin', 'linkedin profile', 'profile url', 'profile_url', 'linkedin link', 'linkedinurl', 'linkedinprofile', 'li url', 'li profile', 'profile'],
+  company: ['company', 'company name', 'organization', 'org', 'employer', 'company_name', 'companyname', 'organisation', 'firm', 'business', 'account', 'account name'],
+  title: ['title', 'job title', 'job_title', 'position', 'role', 'job role', 'jobtitle', 'job', 'headline', 'designation', 'job position'],
 };
 
 const VALID_FIELDS = Object.keys(FIELD_ALIASES);
 
 function normalizeHeader(header: string): string | null {
+  // Exact match after normalization
   const h = header.trim().toLowerCase().replace(/[_\-]/g, ' ').replace(/\s+/g, ' ');
   for (const [field, aliases] of Object.entries(FIELD_ALIASES)) {
     if (aliases.includes(h)) return field;
   }
+
+  // Fuzzy: remove all spaces/underscores/hyphens and compare
+  const compact = h.replace(/\s/g, '');
+  for (const [field, aliases] of Object.entries(FIELD_ALIASES)) {
+    for (const alias of aliases) {
+      if (alias.replace(/\s/g, '') === compact) return field;
+    }
+  }
+
+  // Keyword containment: if the header contains a key word
+  if (compact.includes('linkedin')) return 'linkedin_url';
+  if (compact.includes('firstname') || compact.includes('fname')) return 'first_name';
+  if (compact.includes('lastname') || compact.includes('lname') || compact.includes('surname')) return 'last_name';
+  if (compact.includes('jobtitle') || compact.includes('jobrole') || compact.includes('position') || compact.includes('designation')) return 'title';
+  if (compact.includes('company') || compact.includes('organization') || compact.includes('organisation') || compact.includes('employer')) return 'company';
+  if (compact === 'name' || compact === 'fullname' || compact === 'contactname') return 'name';
+
   return null;
 }
 
@@ -81,13 +99,33 @@ export async function POST(req: NextRequest) {
           contact.linkedin_url = normalizeLinkedInUrl(contact.linkedin_url);
           if (contact.linkedin_url && !isValidLinkedInUrl(contact.linkedin_url)) {
             invalidUrls++;
-            contact.linkedin_url = ''; // clear invalid URLs
+            contact.linkedin_url = '';
           }
         }
         return contact;
-      }).filter((c) => c.first_name || c.last_name || c.name); // skip empty
+      }).filter((c) => c.first_name || c.last_name || c.name || c.linkedin_url || c.company); // accept any row with useful data
 
-      const insertedIds = contacts.bulkCreate(userId, mapped);
+      // Dedup: skip contacts whose LinkedIn URL already exists for this user
+      let duplicates = 0;
+      const existingUrls = new Set<string>();
+      const existingContacts = contacts.getAll(userId!) as any[];
+      for (const c of existingContacts) {
+        if (c.linkedin_url) existingUrls.add(c.linkedin_url.toLowerCase());
+      }
+
+      const deduped = mapped.filter(c => {
+        if (c.linkedin_url) {
+          const normalized = c.linkedin_url.toLowerCase();
+          if (existingUrls.has(normalized)) {
+            duplicates++;
+            return false;
+          }
+          existingUrls.add(normalized); // also dedup within the import itself
+        }
+        return true;
+      });
+
+      const insertedIds = contacts.bulkCreate(userId!, deduped);
       const count = insertedIds.length;
 
       // Assign to sequence if specified
@@ -117,7 +155,7 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      return NextResponse.json({ imported: count, total: rows.length, invalidUrls, sequenced });
+      return NextResponse.json({ imported: count, total: rows.length, invalidUrls, duplicates, sequenced });
     }
 
     return NextResponse.json({ error: 'Invalid request. Send { headers } or { rows, mapping }' }, { status: 400 });
