@@ -62,15 +62,17 @@ export async function POST(req: NextRequest) {
       }
 
       const remaining = user.daily_limit - dailyUsed;
-      // Process more items per cycle (up to 10) since skipped items don't count toward limit
-      const batch = ready.slice(0, Math.min(10, remaining + 5)); // extra buffer for skips
+      // Only process 1-2 ACTUAL sends per cycle (every 2 min = ~30-60 sends per 9hr window)
+      // Allow extra buffer for skips since those don't hit the API
+      const maxSendsPerCycle = 2;
+      const batch = ready.slice(0, Math.min(maxSendsPerCycle + 5, remaining + 5)); // buffer for skips
       const processed: number[] = []; // actual sends (count toward daily limit)
       const skipped: number[] = []; // already connected — don't count
       const errors: string[] = [];
 
       for (const item of batch) {
-        // Stop if we've hit the daily limit with actual sends
-        if (processed.length >= remaining) break;
+        // Stop if we've hit the per-cycle or daily limit with actual sends
+        if (processed.length >= maxSendsPerCycle || processed.length >= remaining) break;
 
         try {
           // Pre-check: if this is a connection request, check contact status in our DB first
