@@ -261,8 +261,8 @@ export default function ContactsPage() {
         setImportState(s => ({ ...s, step: 'done', result: data }));
         fetchContacts();
       }
-    } catch {
-      setImportState(s => ({ ...s, step: 'mapping', error: 'Import failed' }));
+    } catch (err: any) {
+      setImportState(s => ({ ...s, step: 'mapping', error: 'Import failed: ' + (err.message || 'Unknown error') }));
     }
   };
 

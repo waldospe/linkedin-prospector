@@ -117,6 +117,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ error: 'Invalid request. Send { headers } or { rows, mapping }' }, { status: 400 });
   } catch (error: any) {
+    console.error('IMPORT ERROR:', error.message, error.stack?.split('\n')[1]);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
