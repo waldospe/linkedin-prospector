@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import path from 'path';
 
 const dbPath = process.env.DATABASE_PATH || path.join(process.cwd(), 'data', 'app.db');
@@ -37,7 +38,7 @@ function initDb() {
       db.exec(`DROP TABLE IF EXISTS ${t}`);
     }
     db.exec('DELETE FROM schema_version');
-    db.exec('INSERT INTO schema_version (version) VALUES (6)');
+    db.exec('INSERT INTO schema_version (version) VALUES (7)');
   }
 
   if (currentVersion >= 2 && currentVersion < 4) {
@@ -82,6 +83,16 @@ function initDb() {
     db.exec('UPDATE schema_version SET version = 6');
   }
 
+  if (currentVersion === 6) {
+    // v6 -> v7: Add invite_token and invite_status to users
+    const uCols = db.pragma('table_info(users)') as any[];
+    if (uCols && !uCols.find((c: any) => c.name === 'invite_token')) {
+      db.exec(`ALTER TABLE users ADD COLUMN invite_token TEXT`);
+      db.exec(`ALTER TABLE users ADD COLUMN invite_status TEXT DEFAULT 'active'`);
+    }
+    db.exec('UPDATE schema_version SET version = 7');
+  }
+
   // Teams
   db.exec(`
     CREATE TABLE IF NOT EXISTS teams (
@@ -107,6 +118,8 @@ function initDb() {
       message_delay_max INTEGER DEFAULT 20,
       send_schedule TEXT DEFAULT '{"mon":{"enabled":true,"start":"08:00","end":"17:00"},"tue":{"enabled":true,"start":"08:00","end":"17:00"},"wed":{"enabled":true,"start":"08:00","end":"17:00"},"thu":{"enabled":true,"start":"08:00","end":"17:00"},"fri":{"enabled":true,"start":"08:00","end":"17:00"},"sat":{"enabled":false,"start":"08:00","end":"12:00"},"sun":{"enabled":false,"start":"08:00","end":"12:00"}}',
       timezone TEXT DEFAULT 'America/Los_Angeles',
+      invite_token TEXT,
+      invite_status TEXT DEFAULT 'active',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
@@ -353,6 +366,27 @@ export const users = {
     if (!user) return null;
     if (!bcrypt.compareSync(password, user.password_hash)) return null;
     return { id: user.id, name: user.name, email: user.email, role: user.role, team_id: user.team_id };
+  },
+  createWithInvite: (data: {
+    name: string; email: string; role?: string; team_id?: number;
+  }) => {
+    const token = crypto.randomUUID();
+    const tempHash = bcrypt.hashSync(crypto.randomUUID(), 10); // placeholder password
+    return {
+      result: getDb().prepare(`
+        INSERT INTO users (name, email, password_hash, role, team_id, invite_token, invite_status)
+        VALUES (?, ?, ?, ?, ?, ?, 'pending')
+      `).run(data.name, data.email, tempHash, data.role || 'user', data.team_id || null, token),
+      token,
+    };
+  },
+  getByInviteToken: (token: string) => {
+    return getDb().prepare('SELECT * FROM users WHERE invite_token = ?').get(token) as any;
+  },
+  activateInvite: (token: string, password: string) => {
+    const hash = bcrypt.hashSync(password, 10);
+    return getDb().prepare('UPDATE users SET password_hash = ?, invite_token = NULL, invite_status = ? WHERE invite_token = ?')
+      .run(hash, 'active', token);
   },
 };
 

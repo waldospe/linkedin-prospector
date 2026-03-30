@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Input } from '@/components/ui/input';
 import { useUser } from '@/components/user-context';
-import { Plus, Trash2, User, Linkedin, Key, Save, UserCog, X, Users as UsersIcon } from 'lucide-react';
+import { Plus, Trash2, User, Linkedin, Key, Save, UserCog, X, Users as UsersIcon, Mail, Copy, CheckCircle2 } from 'lucide-react';
 
 interface UserType {
   id: number;
@@ -45,6 +45,7 @@ export default function UsersPage() {
   const [message, setMessage] = useState('');
   const [teamsList, setTeamsList] = useState<Array<{ id: number; name: string }>>([]);
   const [newTeamName, setNewTeamName] = useState('');
+  const [inviteResult, setInviteResult] = useState<{ url: string; emailSent: boolean; emailError?: string } | null>(null);
 
   useEffect(() => {
     if (!isAdmin) { router.push('/'); return; }
@@ -90,6 +91,23 @@ export default function UsersPage() {
       showMsg('User created');
     } else {
       const data = await res.json();
+      showMsg(data.error || 'Failed');
+    }
+  };
+
+  const inviteUser = async () => {
+    if (!newUser.name || !newUser.email) return;
+    const teamId = newUser.team_id ? parseInt(newUser.team_id) : currentUser?.team_id;
+    const res = await fetch('/api/users/invite', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newUser.name, email: newUser.email, role: newUser.role, team_id: teamId }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setInviteResult({ url: data.inviteUrl, emailSent: data.emailSent, emailError: data.emailError });
+      fetchUsers();
+      showMsg(data.emailSent ? 'Invite sent!' : 'User created — copy the invite link below');
+    } else {
       showMsg(data.error || 'Failed');
     }
   };
@@ -195,9 +213,38 @@ export default function UsersPage() {
               </select>
             </div>
           </div>
-          <button onClick={createUser} className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 transition-all">
-            <Plus size={14} /> Create User
-          </button>
+          <div className="flex gap-3 mt-4">
+            <button onClick={inviteUser} disabled={!newUser.name || !newUser.email} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 disabled:opacity-40 transition-all">
+              <Mail size={14} /> Send Invite
+            </button>
+            <button onClick={createUser} disabled={!newUser.name || !newUser.email || !newUser.password} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-white hover:bg-secondary disabled:opacity-40 transition-all">
+              <Plus size={14} /> Create with Password
+            </button>
+          </div>
+
+          {inviteResult && (
+            <div className="mt-4 p-4 rounded-xl bg-secondary/50 border border-border animate-slide-up">
+              {inviteResult.emailSent ? (
+                <div className="flex items-center gap-2 text-emerald-400 text-sm">
+                  <CheckCircle2 size={16} />
+                  Invite email sent!
+                </div>
+              ) : (
+                <div className="text-sm text-amber-400 mb-2">
+                  {inviteResult.emailError ? `Email failed: ${inviteResult.emailError}` : 'Email not configured — share this link:'}
+                </div>
+              )}
+              <div className="flex gap-2 mt-2">
+                <input readOnly value={inviteResult.url} className="flex-1 h-8 bg-background/50 text-white text-xs rounded-lg px-3 border border-border" />
+                <button
+                  onClick={() => { navigator.clipboard.writeText(inviteResult.url); showMsg('Copied!'); }}
+                  className="px-3 h-8 rounded-lg bg-secondary border border-border text-xs text-muted-foreground hover:text-white transition-all"
+                >
+                  <Copy size={12} />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

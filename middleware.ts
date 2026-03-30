@@ -17,8 +17,8 @@ async function decodeToken(token: string): Promise<{ userId: number; role: strin
 export async function middleware(request: Request) {
   const url = new URL(request.url);
 
-  // Allow login page, auth routes, and cron endpoint through
-  if (url.pathname === '/login' || url.pathname === '/api/auth' || url.pathname === '/api/auth/check' || url.pathname === '/api/queue/auto-process') {
+  // Allow login, invite, auth routes, and cron endpoint through
+  if (url.pathname === '/login' || url.pathname.startsWith('/invite/') || url.pathname.startsWith('/api/invite/') || url.pathname === '/api/auth' || url.pathname === '/api/auth/check' || url.pathname === '/api/queue/auto-process' || url.pathname === '/api/unipile/callback') {
     return NextResponse.next();
   }
 

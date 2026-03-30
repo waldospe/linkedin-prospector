@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { useUser } from '@/components/user-context';
-import { Save, Key, Clock, Shield, Lock, CheckCircle2, Globe, Calendar } from 'lucide-react';
+import { Save, Key, Clock, Shield, Lock, CheckCircle2, Globe, Calendar, Linkedin } from 'lucide-react';
 
 const TIMEZONES = [
   'America/New_York',
@@ -58,7 +58,7 @@ const defaultSchedule: Record<string, SendDay> = {
 };
 
 export default function SettingsPage() {
-  const { isAdmin } = useUser();
+  const { isAdmin, currentUser } = useUser();
   const [config, setConfig] = useState<Config>({
     pipedrive_api_key: '',
     daily_limit: 20,
@@ -167,6 +167,45 @@ export default function SettingsPage() {
           </div>
         </div>
       )}
+
+      {/* LinkedIn Connection */}
+      <div className="glass rounded-xl p-6">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/15 flex items-center justify-center">
+            <Linkedin size={14} className="text-blue-400" />
+          </div>
+          <div>
+            <h3 className="text-sm font-medium text-white">LinkedIn Connection</h3>
+            <p className="text-xs text-muted-foreground">Connect your LinkedIn account for outreach</p>
+          </div>
+        </div>
+        {currentUser?.unipile_account_id && currentUser.unipile_account_id !== 'pending' ? (
+          <div className="flex items-center gap-2 text-emerald-400 text-sm">
+            <CheckCircle2 size={16} />
+            LinkedIn connected
+          </div>
+        ) : (
+          <button
+            onClick={async () => {
+              try {
+                const res = await fetch('/api/unipile/connect', { method: 'POST' });
+                const data = await res.json();
+                if (data.url) {
+                  window.open(data.url, '_blank');
+                } else {
+                  setMessage(data.error || 'Failed to generate connection link');
+                }
+              } catch {
+                setMessage('Failed to connect');
+              }
+            }}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 transition-all glow-sm"
+          >
+            <Linkedin size={15} />
+            Connect LinkedIn
+          </button>
+        )}
+      </div>
 
       {/* Pipedrive */}
       <div className="glass rounded-xl p-6">

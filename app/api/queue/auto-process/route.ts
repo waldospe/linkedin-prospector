@@ -75,6 +75,14 @@ export async function POST(req: NextRequest) {
         if (processed.length >= maxSendsPerCycle || processed.length >= remaining) break;
 
         try {
+          // Verify this queue item's contact belongs to this user
+          const ownedContact = contacts.getById(item.contact_id, user.id);
+          if (!ownedContact) {
+            console.log(`SKIP ${item.contact_name} — contact not owned by ${user.name}`);
+            queue.updateStatus(item.id, 'failed', user.id, 'Contact belongs to another user');
+            continue;
+          }
+
           // Pre-check: if this is a connection request, check contact status in our DB first
           // This avoids unnecessary API calls and doesn't count toward daily limit
           if (item.action_type === 'connection') {
