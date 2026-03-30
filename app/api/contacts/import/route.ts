@@ -19,30 +19,29 @@ const FIELD_ALIASES: Record<string, string[]> = {
 
 const VALID_FIELDS = Object.keys(FIELD_ALIASES);
 
-function normalizeHeader(header: string): string | null {
-  // Exact match after normalization
+// Score how well a CSV header matches a contact field (0 = no match, higher = better)
+function scoreHeaderMatch(header: string, field: string): number {
   const h = header.trim().toLowerCase().replace(/[_\-]/g, ' ').replace(/\s+/g, ' ');
-  for (const [field, aliases] of Object.entries(FIELD_ALIASES)) {
-    if (aliases.includes(h)) return field;
-  }
-
-  // Fuzzy: remove all spaces/underscores/hyphens and compare
   const compact = h.replace(/\s/g, '');
-  for (const [field, aliases] of Object.entries(FIELD_ALIASES)) {
-    for (const alias of aliases) {
-      if (alias.replace(/\s/g, '') === compact) return field;
-    }
+  const aliases = FIELD_ALIASES[field] || [];
+
+  // Exact match = highest score
+  if (aliases.includes(h)) return 100;
+
+  // Compact match (remove spaces)
+  for (const alias of aliases) {
+    if (alias.replace(/\s/g, '') === compact) return 90;
   }
 
-  // Keyword containment: if the header contains a key word
-  if (compact.includes('linkedin')) return 'linkedin_url';
-  if (compact.includes('firstname') || compact.includes('fname')) return 'first_name';
-  if (compact.includes('lastname') || compact.includes('lname') || compact.includes('surname')) return 'last_name';
-  if (compact.includes('jobtitle') || compact.includes('jobrole') || compact.includes('position') || compact.includes('designation')) return 'title';
-  if (compact.includes('company') || compact.includes('organization') || compact.includes('organisation') || compact.includes('employer')) return 'company';
-  if (compact === 'name' || compact === 'fullname' || compact === 'contactname') return 'name';
+  // Keyword match (lower score, only for specific patterns)
+  if (field === 'linkedin_url' && compact.includes('linkedin')) return 70;
+  if (field === 'first_name' && (compact === 'firstname' || compact === 'fname' || compact === 'givenname')) return 80;
+  if (field === 'last_name' && (compact === 'lastname' || compact === 'lname' || compact === 'surname' || compact === 'familyname')) return 80;
+  if (field === 'title' && (compact.includes('jobtitle') || compact === 'position' || compact === 'designation')) return 70;
+  if (field === 'company' && (compact === 'companyname' || compact === 'organizationname' || compact === 'employer')) return 70;
+  if (field === 'name' && (compact === 'fullname' || compact === 'contactname')) return 70;
 
-  return null;
+  return 0;
 }
 
 // POST: Preview/validate headers for CSV or Google Sheets data
@@ -58,12 +57,30 @@ export async function POST(req: NextRequest) {
     // Step 1: Header validation - return suggested mapping
     if (body.headers && !body.rows) {
       const headers = body.headers as string[];
-      const mapping: Record<string, string | null> = {};
       const suggestions: Record<string, string | null> = {};
+      const usedFields = new Set<string>();
 
+      // First pass: score each header against each field
+      const scores: Array<{ header: string; field: string; score: number }> = [];
       for (const header of headers) {
-        const match = normalizeHeader(header);
-        suggestions[header] = match;
+        for (const field of VALID_FIELDS) {
+          const score = scoreHeaderMatch(header, field);
+          if (score > 0) scores.push({ header, field, score });
+        }
+      }
+
+      // Sort by score descending, then assign greedily (each field used only once)
+      scores.sort((a, b) => b.score - a.score);
+      for (const { header, field } of scores) {
+        if (suggestions[header] !== undefined) continue; // header already assigned
+        if (usedFields.has(field)) continue; // field already used
+        suggestions[header] = field;
+        usedFields.add(field);
+      }
+
+      // Fill in unmatched headers as null
+      for (const header of headers) {
+        if (suggestions[header] === undefined) suggestions[header] = null;
       }
 
       return NextResponse.json({

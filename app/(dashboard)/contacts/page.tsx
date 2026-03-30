@@ -643,19 +643,31 @@ export default function ContactsPage() {
                 <span className="text-white font-medium">{importState.rows.length}</span> rows, <span className="text-white font-medium">{importState.headers.length}</span> columns. Map to contact fields:
               </p>
               <div className="space-y-2 max-h-[250px] overflow-auto">
-                {importState.headers.map((header) => (
-                  <div key={header} className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50 border border-border/50">
-                    <span className="text-sm text-white font-medium w-40 truncate shrink-0" title={header}>{header}</span>
-                    <ArrowRight size={14} className="text-muted-foreground shrink-0" />
-                    <select value={importState.mapping[header] || ''} onChange={(e) => setImportState(s => ({ ...s, mapping: { ...s.mapping, [header]: e.target.value } }))} className="flex-1 h-8 bg-background/50 text-white text-sm rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50">
-                      <option value="">Skip</option>
-                      {importState.validFields.map(f => (<option key={f} value={f}>{importState.fieldLabels[f] || f}</option>))}
-                    </select>
-                    {importState.suggestions[header] && importState.mapping[header] === importState.suggestions[header] && (
-                      <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
-                    )}
-                  </div>
-                ))}
+                {importState.headers.map((header) => {
+                  // Find which fields are already used by OTHER headers
+                  const usedByOthers = new Set(
+                    Object.entries(importState.mapping)
+                      .filter(([h, v]) => h !== header && v)
+                      .map(([_, v]) => v)
+                  );
+                  return (
+                    <div key={header} className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50 border border-border/50">
+                      <span className="text-sm text-white font-medium w-40 truncate shrink-0" title={header}>{header}</span>
+                      <ArrowRight size={14} className="text-muted-foreground shrink-0" />
+                      <select value={importState.mapping[header] || ''} onChange={(e) => setImportState(s => ({ ...s, mapping: { ...s.mapping, [header]: e.target.value } }))} className="flex-1 h-8 bg-background/50 text-white text-sm rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50">
+                        <option value="">Skip</option>
+                        {importState.validFields.map(f => (
+                          <option key={f} value={f} disabled={usedByOthers.has(f)}>
+                            {importState.fieldLabels[f] || f}{usedByOthers.has(f) ? ' (used)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                      {importState.suggestions[header] && importState.mapping[header] === importState.suggestions[header] && (
+                        <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
+                      )}
+                    </div>
+                  );
+                })}
               </div>
               {!hasNameMapping && (
                 <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
