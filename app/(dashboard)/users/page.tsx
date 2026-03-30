@@ -15,7 +15,23 @@ interface UserType {
   unipile_account_id: string | null;
   pipedrive_api_key: string | null;
   daily_limit: number;
+  message_delay_min: number;
+  message_delay_max: number;
+  timezone: string;
+  send_schedule: any;
 }
+
+const TIMEZONES = [
+  'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
+  'America/Phoenix', 'America/Anchorage', 'Pacific/Honolulu',
+  'America/Toronto', 'America/Vancouver',
+  'Europe/London', 'Europe/Paris', 'Europe/Berlin',
+  'Asia/Tokyo', 'Asia/Shanghai', 'Australia/Sydney', 'Pacific/Auckland',
+];
+const DAY_LABELS: Record<string, string> = {
+  mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun',
+};
+const DAY_ORDER = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 
 export default function UsersPage() {
   const router = useRouter();
@@ -80,7 +96,26 @@ export default function UsersPage() {
 
   const startEdit = (u: UserType) => {
     setEditingId(u.id);
-    setEditFields({ unipile_account_id: u.unipile_account_id || '', pipedrive_api_key: u.pipedrive_api_key || '', daily_limit: u.daily_limit, password: '' });
+    setEditFields({
+      unipile_account_id: u.unipile_account_id || '',
+      pipedrive_api_key: u.pipedrive_api_key || '',
+      daily_limit: u.daily_limit,
+      message_delay_min: u.message_delay_min || 15,
+      message_delay_max: u.message_delay_max || 20,
+      timezone: u.timezone || 'America/Los_Angeles',
+      send_schedule: u.send_schedule || {},
+      password: '',
+    });
+  };
+
+  const updateScheduleDay = (day: string, field: string, value: any) => {
+    setEditFields((prev: any) => ({
+      ...prev,
+      send_schedule: {
+        ...prev.send_schedule,
+        [day]: { ...(prev.send_schedule?.[day] || { enabled: false, start: '08:00', end: '17:00' }), [field]: value },
+      },
+    }));
   };
 
   if (!isAdmin) return null;
@@ -185,9 +220,48 @@ export default function UsersPage() {
                           <label className="text-xs text-muted-foreground mb-1 block">Pipedrive API Key</label>
                           <Input type="password" value={editFields.pipedrive_api_key || ''} onChange={(e) => setEditFields({ ...editFields, pipedrive_api_key: e.target.value })} className="bg-background/50 border-border h-8 text-sm" />
                         </div>
+                        <div className="grid grid-cols-3 gap-3">
+                          <div>
+                            <label className="text-xs text-muted-foreground mb-1 block">Daily Limit</label>
+                            <Input type="number" value={editFields.daily_limit} onChange={(e) => setEditFields({ ...editFields, daily_limit: parseInt(e.target.value) })} className="bg-background/50 border-border h-8 text-sm" />
+                          </div>
+                          <div>
+                            <label className="text-xs text-muted-foreground mb-1 block">Min Delay (min)</label>
+                            <Input type="number" value={editFields.message_delay_min} onChange={(e) => setEditFields({ ...editFields, message_delay_min: parseInt(e.target.value) })} className="bg-background/50 border-border h-8 text-sm" />
+                          </div>
+                          <div>
+                            <label className="text-xs text-muted-foreground mb-1 block">Max Delay (min)</label>
+                            <Input type="number" value={editFields.message_delay_max} onChange={(e) => setEditFields({ ...editFields, message_delay_max: parseInt(e.target.value) })} className="bg-background/50 border-border h-8 text-sm" />
+                          </div>
+                        </div>
                         <div>
-                          <label className="text-xs text-muted-foreground mb-1 block">Daily Limit</label>
-                          <Input type="number" value={editFields.daily_limit} onChange={(e) => setEditFields({ ...editFields, daily_limit: parseInt(e.target.value) })} className="bg-background/50 border-border h-8 text-sm w-24" />
+                          <label className="text-xs text-muted-foreground mb-1 block">Timezone</label>
+                          <select value={editFields.timezone || 'America/Los_Angeles'} onChange={(e) => setEditFields({ ...editFields, timezone: e.target.value })} className="h-8 bg-background/50 text-white text-xs rounded-lg px-2 border border-border focus:outline-none focus:border-blue-500/50 w-full">
+                            {TIMEZONES.map(tz => (<option key={tz} value={tz}>{tz.replace(/_/g, ' ')}</option>))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground mb-1.5 block">Send Schedule</label>
+                          <div className="space-y-1">
+                            {DAY_ORDER.map(day => {
+                              const d = editFields.send_schedule?.[day] || { enabled: false, start: '08:00', end: '17:00' };
+                              return (
+                                <div key={day} className="flex items-center gap-2 p-1.5 rounded-md bg-secondary/30">
+                                  <label className="flex items-center gap-1.5 w-14 cursor-pointer">
+                                    <input type="checkbox" checked={d.enabled} onChange={(e) => updateScheduleDay(day, 'enabled', e.target.checked)} className="w-3.5 h-3.5 rounded border-border bg-background accent-blue-600" />
+                                    <span className={`text-[11px] font-medium ${d.enabled ? 'text-white' : 'text-muted-foreground'}`}>{DAY_LABELS[day]}</span>
+                                  </label>
+                                  {d.enabled && (
+                                    <div className="flex items-center gap-1">
+                                      <input type="time" value={d.start} onChange={(e) => updateScheduleDay(day, 'start', e.target.value)} className="h-6 bg-background/50 text-white text-[11px] rounded px-1 border border-border focus:outline-none" />
+                                      <span className="text-[10px] text-muted-foreground">-</span>
+                                      <input type="time" value={d.end} onChange={(e) => updateScheduleDay(day, 'end', e.target.value)} className="h-6 bg-background/50 text-white text-[11px] rounded px-1 border border-border focus:outline-none" />
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
                         <div>
                           <label className="text-xs text-muted-foreground mb-1 block">Reset Password</label>
