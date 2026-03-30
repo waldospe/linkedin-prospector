@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     }
 
     const allUsers = users.getAll() as any[];
-    const results: Array<{ user: string; processed: number; errors: string[]; monitored?: number }> = [];
+    const results: Array<{ user: string; processed: number; skipped?: number; errors: string[]; monitored?: number }> = [];
     const dsn = cfg.unipile_dsn || 'api21.unipile.com:15135';
     const baseUrl = `https://${dsn}/api/v1`;
 
@@ -56,14 +56,22 @@ export async function POST(req: NextRequest) {
         return new Date(item.scheduled_at) <= new Date();
       });
 
-      if (ready.length === 0) continue;
+      if (ready.length === 0) {
+        if (monitored > 0) results.push({ user: user.name, processed: 0, errors: [], monitored });
+        continue;
+      }
 
       const remaining = user.daily_limit - dailyUsed;
-      const batch = ready.slice(0, Math.min(3, remaining)); // process up to 3 per cycle
-      const processed: number[] = [];
+      // Process more items per cycle (up to 10) since skipped items don't count toward limit
+      const batch = ready.slice(0, Math.min(10, remaining + 5)); // extra buffer for skips
+      const processed: number[] = []; // actual sends (count toward daily limit)
+      const skipped: number[] = []; // already connected — don't count
       const errors: string[] = [];
 
       for (const item of batch) {
+        // Stop if we've hit the daily limit with actual sends
+        if (processed.length >= remaining) break;
+
         try {
           const contact = {
             first_name: item.first_name,
@@ -119,37 +127,16 @@ export async function POST(req: NextRequest) {
           const alreadyConnected = profile.is_relationship === true || profile.network_distance === 'FIRST_DEGREE';
 
           if (item.action_type === 'connection') {
-            // Skip connection request if already connected
+            // Skip connection request if already connected — does NOT count toward daily limit
             if (alreadyConnected) {
               console.log(`SKIP invite for ${item.contact_name} — already connected`);
               queue.updateStatus(item.id, 'completed', user.id);
               contacts.updateStatus(item.contact_id, 'connected', user.id);
-
-              // If there's a next step in the sequence, schedule it immediately
-              if (item.sequence_id && item.sequence_steps) {
-                const steps = typeof item.sequence_steps === 'string' ? JSON.parse(item.sequence_steps) : item.sequence_steps;
-                const nextStepIdx = item.step_number;
-                if (nextStepIdx < steps.length) {
-                  const nextStep = steps[nextStepIdx];
-                  const contact = {
-                    first_name: item.first_name, last_name: item.last_name,
-                    name: item.contact_name, company: item.company, title: item.title,
-                  };
-                  const nextMessage = nextStep.template
-                    ? substituteVariables(nextStep.template, contact)
-                    : '';
-                  queue.create(user.id, {
-                    contact_id: item.contact_id,
-                    sequence_id: item.sequence_id,
-                    step_number: item.step_number + 1,
-                    action_type: nextStep.action,
-                    message_text: nextMessage,
-                    scheduled_at: new Date(Date.now() + (nextStep.delay_hours || 0) * 3600000).toISOString(),
-                  });
-                }
-              }
-              processed.push(item.id);
-              continue;
+              // Do NOT queue follow-up messages from connection sequences for already-connected contacts.
+              // The sequence was designed for new connections. If they're already connected,
+              // the outreach context doesn't apply.
+              // (Message-only sequences assigned to connected contacts will work fine separately.)
+              continue; // skip without counting toward daily limit
             }
 
             const res = await fetch(`${baseUrl}/users/invite`, {
@@ -243,8 +230,8 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      if (processed.length > 0 || errors.length > 0 || monitored > 0) {
-        results.push({ user: user.name, processed: processed.length, errors, monitored });
+      if (processed.length > 0 || skipped.length > 0 || errors.length > 0 || monitored > 0) {
+        results.push({ user: user.name, processed: processed.length, skipped: skipped.length, errors, monitored });
       }
     }
 
@@ -262,7 +249,7 @@ async function monitorContacts(user: any, cfg: any, baseUrl: string): Promise<nu
 
   // Check contacts with invite_sent — have they accepted?
   const inviteSent = contacts.getByStatus('invite_sent', user.id) as any[];
-  for (const contact of inviteSent.slice(0, 5)) { // check up to 5 per cycle
+  for (const contact of inviteSent.slice(0, 15)) { // check up to 15 per cycle
     if (!contact.linkedin_url) continue;
     const slugMatch = contact.linkedin_url.match(/linkedin\.com\/in\/([a-zA-Z0-9\-_.]+)/);
     if (!slugMatch) continue;
@@ -320,7 +307,7 @@ async function monitorContacts(user: any, cfg: any, baseUrl: string): Promise<nu
 
   // Check contacts with msg_sent — have they replied?
   const msgSent = contacts.getByStatus('msg_sent', user.id) as any[];
-  for (const contact of msgSent.slice(0, 5)) {
+  for (const contact of msgSent.slice(0, 15)) {
     if (!contact.linkedin_url) continue;
     const slugMatch = contact.linkedin_url.match(/linkedin\.com\/in\/([a-zA-Z0-9\-_.]+)/);
     if (!slugMatch) continue;
