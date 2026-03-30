@@ -18,7 +18,7 @@ export async function middleware(request: Request) {
   const url = new URL(request.url);
 
   // Allow login, invite, auth routes, and cron endpoint through
-  if (url.pathname === '/login' || url.pathname.startsWith('/invite/') || url.pathname.startsWith('/api/invite/') || url.pathname === '/api/auth' || url.pathname === '/api/auth/check' || url.pathname === '/api/queue/auto-process' || url.pathname === '/api/unipile/callback') {
+  if (url.pathname === '/login' || url.pathname.startsWith('/invite/') || url.pathname.startsWith('/api/invite/') || url.pathname === '/api/auth' || url.pathname === '/api/auth/check' || url.pathname === '/api/auth/signup' || url.pathname === '/api/teams' || url.pathname === '/api/queue/auto-process' || url.pathname === '/api/unipile/callback') {
     return NextResponse.next();
   }
 

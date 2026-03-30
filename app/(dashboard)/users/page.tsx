@@ -207,10 +207,34 @@ export default function UsersPage() {
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Team</label>
-              <select value={newUser.team_id} onChange={(e) => setNewUser({ ...newUser, team_id: e.target.value })} className="w-full h-10 bg-background/50 text-white text-sm rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50">
-                <option value="">Default (your team)</option>
-                {teamsList.map(t => (<option key={t.id} value={t.id}>{t.name}</option>))}
-              </select>
+              <div className="flex gap-2">
+                <select value={newUser.team_id} onChange={(e) => setNewUser({ ...newUser, team_id: e.target.value })} className="flex-1 h-10 bg-background/50 text-white text-sm rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50">
+                  <option value="">Default (your team)</option>
+                  {teamsList.map(t => (<option key={t.id} value={t.id}>{t.name}</option>))}
+                  <option value="__new__">+ Create new team</option>
+                </select>
+              </div>
+              {newUser.team_id === '__new__' && (
+                <div className="flex gap-2 mt-2">
+                  <Input placeholder="New team name" value={newTeamName} onChange={(e) => setNewTeamName(e.target.value)} className="bg-background/50 border-border h-9 text-sm flex-1" />
+                  <button
+                    onClick={async () => {
+                      if (!newTeamName.trim()) return;
+                      const res = await fetch('/api/teams', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newTeamName.trim() }) });
+                      const data = await res.json();
+                      if (data.id) {
+                        await fetchTeams();
+                        setNewUser({ ...newUser, team_id: String(data.id) });
+                        setNewTeamName('');
+                      }
+                    }}
+                    disabled={!newTeamName.trim()}
+                    className="px-3 h-9 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-500 disabled:opacity-40 transition-all shrink-0"
+                  >
+                    Create
+                  </button>
+                </div>
+              )}
             </div>
           </div>
           <div className="flex gap-3 mt-4">
