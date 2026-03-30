@@ -12,7 +12,7 @@ function getResend(): Resend {
 }
 
 const APP_URL = process.env.NEXTAUTH_URL || process.env.APP_URL || 'https://lp.moco.inc';
-const FROM_EMAIL = process.env.FROM_EMAIL || 'LinkedIn Prospector <noreply@moco.inc>';
+const FROM_EMAIL = process.env.FROM_EMAIL || 'LinkedIn Prospector <noreply@notify.moco.inc>';
 
 export async function sendInviteEmail(opts: {
   to: string;
