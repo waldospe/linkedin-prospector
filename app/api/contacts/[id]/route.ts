@@ -20,12 +20,17 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
             ? substituteVariables(steps[0].template, contact || {})
             : '';
 
+          // Add small random delay so it doesn't all fire at window start
+          const jitter = Math.floor(Math.random() * 30) * 60 * 1000; // 0-30 min random delay
+          const scheduledAt = new Date(Date.now() + jitter).toISOString();
+
           queue.create(userId, {
             contact_id: contactId,
             sequence_id: data.sequence_id,
             step_number: 1,
             action_type: steps[0].action,
             message_text: messageText,
+            scheduled_at: scheduledAt,
           });
 
           contacts.updateStatus(contactId, 'queued', userId);
