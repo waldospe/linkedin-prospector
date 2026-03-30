@@ -47,9 +47,12 @@ export function isValidLinkedInUrl(url: string): boolean {
 export function normalizeLinkedInUrl(url: string): string {
   if (!url) return '';
   let cleaned = url.trim();
-  // Add https if missing
-  if (cleaned.startsWith('linkedin.com') || cleaned.startsWith('www.linkedin.com')) {
-    cleaned = 'https://' + cleaned;
+  // Add https:// if missing protocol
+  if (!cleaned.startsWith('http://') && !cleaned.startsWith('https://')) {
+    // Handle linkedin.com/in/... or www.linkedin.com/in/...
+    if (cleaned.includes('linkedin.com/')) {
+      cleaned = 'https://' + cleaned;
+    }
   }
   // Remove trailing slash
   cleaned = cleaned.replace(/\/+$/, '');

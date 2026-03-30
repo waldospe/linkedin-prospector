@@ -19,11 +19,26 @@ const FIELD_ALIASES: Record<string, string[]> = {
 
 const VALID_FIELDS = Object.keys(FIELD_ALIASES);
 
+// Headers that should NEVER be auto-matched (they contain misleading keywords)
+const IGNORE_HEADERS = new Set([
+  'companydescription', 'companyheadcount', 'companydomain', 'companywebsite',
+  'summary', 'personalization', 'subindustry', 'industry',
+  'emailprovider', 'emailsecuritygatewayprovider', 'verificationstatus',
+  'interststatus', 'leadstatus', 'campaignname', 'campaign',
+  'sentandy', 'sentrobert', 'statusandy', 'statusrobert',
+  'acceptedandy', 'acceptedrobert', 'connectioncount',
+  'esgcode', 'espcode', 'lastcontactedfrom', 'joblevel',
+  'website', 'department', 'email',
+]);
+
 // Score how well a CSV header matches a contact field (0 = no match, higher = better)
 function scoreHeaderMatch(header: string, field: string): number {
   const h = header.trim().toLowerCase().replace(/[_\-]/g, ' ').replace(/\s+/g, ' ');
   const compact = h.replace(/\s/g, '');
   const aliases = FIELD_ALIASES[field] || [];
+
+  // Never match ignored headers
+  if (IGNORE_HEADERS.has(compact)) return 0;
 
   // Exact match = highest score
   if (aliases.includes(h)) return 100;
@@ -33,12 +48,12 @@ function scoreHeaderMatch(header: string, field: string): number {
     if (alias.replace(/\s/g, '') === compact) return 90;
   }
 
-  // Keyword match (lower score, only for specific patterns)
-  if (field === 'linkedin_url' && compact.includes('linkedin')) return 70;
-  if (field === 'first_name' && (compact === 'firstname' || compact === 'fname' || compact === 'givenname')) return 80;
-  if (field === 'last_name' && (compact === 'lastname' || compact === 'lname' || compact === 'surname' || compact === 'familyname')) return 80;
-  if (field === 'title' && (compact.includes('jobtitle') || compact === 'position' || compact === 'designation')) return 70;
-  if (field === 'company' && (compact === 'companyname' || compact === 'organizationname' || compact === 'employer')) return 70;
+  // Keyword match (lower score, only for specific exact patterns)
+  if (field === 'linkedin_url' && (compact === 'linkedin' || compact === 'linkedinurl' || compact === 'linkedinprofile')) return 80;
+  if (field === 'first_name' && (compact === 'firstname' || compact === 'fname')) return 80;
+  if (field === 'last_name' && (compact === 'lastname' || compact === 'lname' || compact === 'surname')) return 80;
+  if (field === 'title' && (compact === 'jobtitle' || compact === 'position' || compact === 'designation')) return 80;
+  if (field === 'company' && (compact === 'companyname' || compact === 'organizationname' || compact === 'employer')) return 80;
   if (field === 'name' && (compact === 'fullname' || compact === 'contactname')) return 70;
 
   return 0;
