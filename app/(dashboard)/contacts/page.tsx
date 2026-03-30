@@ -120,7 +120,7 @@ export default function ContactsPage() {
     const payload: any = { ...newContact };
     if (payload.sequence_id) payload.sequence_id = parseInt(payload.sequence_id);
     else delete payload.sequence_id;
-    await fetch('/api/contacts', {
+    await fetch(`/api/contacts${apiQuery}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -208,7 +208,7 @@ export default function ContactsPage() {
     if (!sheetsUrl) return;
     setImportState(s => ({ ...s, error: '' }));
     try {
-      const res = await fetch('/api/contacts/import/sheets', {
+      const res = await fetch(`/api/contacts/import/sheets${apiQuery}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: sheetsUrl }),
@@ -225,7 +225,7 @@ export default function ContactsPage() {
   };
 
   const validateHeaders = async (headers: string[], rows: any[]) => {
-    const res = await fetch('/api/contacts/import', {
+    const res = await fetch(`/api/contacts/import${apiQuery}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ headers }),
@@ -245,7 +245,7 @@ export default function ContactsPage() {
   const executeImport = async () => {
     setImportState(s => ({ ...s, step: 'importing' }));
     try {
-      const res = await fetch('/api/contacts/import', {
+      const res = await fetch(`/api/contacts/import${apiQuery}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

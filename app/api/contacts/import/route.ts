@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserFromRequest } from '@/lib/api-auth';
+import { getEffectiveUser } from '@/lib/api-auth';
 import { contacts, sequences, queue } from '@/lib/db';
 import { normalizeLinkedInUrl, isValidLinkedInUrl, substituteVariables } from '@/lib/constants';
 
@@ -28,7 +28,8 @@ function normalizeHeader(header: string): string | null {
 // Or: { rows: Array<Record<string, string>>, mapping: Record<string, string> } -> imports data
 export async function POST(req: NextRequest) {
   try {
-    const { userId } = getUserFromRequest(req);
+    const { effectiveUserId, userId: authUserId } = getEffectiveUser(req);
+    const userId = effectiveUserId || authUserId;
     const body = await req.json();
 
     // Step 1: Header validation - return suggested mapping
