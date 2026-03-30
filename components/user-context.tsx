@@ -50,7 +50,16 @@ const UserContext = createContext<UserContextType>({
 export function UserProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [viewAs, setViewAs] = useState<ViewAs>(null);
+  const [viewAs, setViewAsState] = useState<ViewAs>(null);
+
+  // Persist viewAs in localStorage
+  const setViewAs = (v: ViewAs) => {
+    setViewAsState(v);
+    if (typeof window !== 'undefined') {
+      if (v === null) localStorage.removeItem('viewAs');
+      else localStorage.setItem('viewAs', String(v));
+    }
+  };
   const [teamUsers, setTeamUsers] = useState<User[]>([]);
 
   const fetchCurrentUser = async () => {
@@ -79,6 +88,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     fetchCurrentUser();
+    // Restore viewAs from localStorage
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('viewAs');
+      if (saved === 'all') setViewAsState('all');
+      else if (saved) setViewAsState(parseInt(saved));
+    }
   }, []);
 
   const isAdmin = currentUser?.role === 'admin';

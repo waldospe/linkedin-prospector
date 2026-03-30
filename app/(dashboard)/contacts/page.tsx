@@ -10,7 +10,7 @@ import {
   DialogTrigger
 } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Trash2, Upload, ExternalLink, Search, Users, FileSpreadsheet, Link2, CheckCircle2, AlertCircle, ArrowRight, Filter, GitBranch } from 'lucide-react';
+import { Plus, Trash2, Upload, ExternalLink, Search, Users, FileSpreadsheet, Link2, CheckCircle2, AlertCircle, ArrowRight, Filter, GitBranch, AlertTriangle } from 'lucide-react';
 import { FUNNEL_STAGES, stageColors, STAGE_MAP } from '@/lib/constants';
 import { useUser } from '@/components/user-context';
 
@@ -66,6 +66,7 @@ export default function ContactsPage() {
   const [sheetsUrl, setSheetsUrl] = useState('');
   const [lookingUp, setLookingUp] = useState(false);
   const [lookupError, setLookupError] = useState('');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const { apiQuery, viewAs, isViewingAll } = useUser();
 
   useEffect(() => {
@@ -167,6 +168,18 @@ export default function ContactsPage() {
     );
     setSelectedIds(new Set());
     setBulkSequenceId('');
+    fetchContacts();
+  };
+
+  const bulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    await fetch(`/api/contacts/bulk-delete${apiQuery}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: Array.from(selectedIds) }),
+    });
+    setSelectedIds(new Set());
+    setShowDeleteConfirm(false);
     fetchContacts();
   };
 
@@ -455,6 +468,11 @@ export default function ContactsPage() {
               </button>
             </div>
           )}
+          <div className="h-4 w-px bg-border" />
+          <button onClick={() => setShowDeleteConfirm(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-500/20 text-red-400 text-xs font-medium hover:bg-red-500/10 transition-all">
+            <Trash2 size={12} />
+            Delete
+          </button>
           <button onClick={() => setSelectedIds(new Set())} className="ml-auto text-xs text-muted-foreground hover:text-white transition-colors">
             Deselect all
           </button>
@@ -526,6 +544,35 @@ export default function ContactsPage() {
           })}
         </div>
       )}
+
+      {/* Delete Confirmation */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent className="glass border-border/50 text-white sm:rounded-2xl sm:max-w-sm">
+          <div className="text-center py-2">
+            <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center mx-auto mb-4">
+              <AlertTriangle size={24} className="text-red-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-white">Delete {selectedIds.size} contacts?</h3>
+            <p className="text-sm text-muted-foreground mt-2">
+              This will permanently delete the selected contacts and remove them from any active sequences. This cannot be undone.
+            </p>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1 h-10 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-white hover:bg-secondary transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={bulkDelete}
+                className="flex-1 h-10 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-500 transition-all"
+              >
+                Delete {selectedIds.size} Contacts
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Import Dialog */}
       <Dialog open={showImport} onOpenChange={(open) => { if (!open) { setShowImport(false); resetImport(); } }}>
