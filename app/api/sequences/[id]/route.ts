@@ -4,9 +4,10 @@ import { sequences } from '@/lib/db';
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const { userId } = getUserFromRequest(req);
-    const { name, steps, active } = await req.json();
-    sequences.update(Number(params.id), userId, name, steps, active);
+    const { userId, role } = getUserFromRequest(req);
+    const data = await req.json();
+    const result = sequences.update(Number(params.id), userId, data, role === 'admin');
+    if (!result) return NextResponse.json({ error: 'Not found or not authorized' }, { status: 404 });
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to update sequence' }, { status: 500 });
@@ -15,8 +16,9 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const { userId } = getUserFromRequest(req);
-    sequences.delete(Number(params.id), userId);
+    const { userId, role } = getUserFromRequest(req);
+    const deleted = sequences.delete(Number(params.id), userId, role === 'admin');
+    if (!deleted) return NextResponse.json({ error: 'Not found or not authorized' }, { status: 404 });
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to delete sequence' }, { status: 500 });

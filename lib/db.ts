@@ -37,7 +37,7 @@ function initDb() {
       db.exec(`DROP TABLE IF EXISTS ${t}`);
     }
     db.exec('DELETE FROM schema_version');
-    db.exec('INSERT INTO schema_version (version) VALUES (5)');
+    db.exec('INSERT INTO schema_version (version) VALUES (6)');
   }
 
   if (currentVersion >= 2 && currentVersion < 4) {
@@ -65,12 +65,21 @@ function initDb() {
   }
 
   if (currentVersion === 4) {
-    // v4 -> v5: Add timezone to users
     const uCols = db.pragma('table_info(users)') as any[];
     if (uCols && !uCols.find((c: any) => c.name === 'timezone')) {
       db.exec(`ALTER TABLE users ADD COLUMN timezone TEXT DEFAULT 'America/Los_Angeles'`);
     }
     db.exec('UPDATE schema_version SET version = 5');
+  }
+
+  if (currentVersion === 5) {
+    // v5 -> v6: Add visibility + shared_with_user_ids to sequences
+    const sCols = db.pragma('table_info(sequences)') as any[];
+    if (sCols && !sCols.find((c: any) => c.name === 'visibility')) {
+      db.exec(`ALTER TABLE sequences ADD COLUMN visibility TEXT DEFAULT 'private'`);
+      db.exec(`ALTER TABLE sequences ADD COLUMN shared_with_user_ids TEXT DEFAULT ''`);
+    }
+    db.exec('UPDATE schema_version SET version = 6');
   }
 
   // Teams
@@ -137,6 +146,8 @@ function initDb() {
       name TEXT NOT NULL,
       steps TEXT NOT NULL,
       active INTEGER DEFAULT 1,
+      visibility TEXT DEFAULT 'private',
+      shared_with_user_ids TEXT DEFAULT '',
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
@@ -468,24 +479,60 @@ export const contacts = {
   },
 };
 
-// Sequences (scoped to user)
+// Sequences (user's own + shared with them)
 export const sequences = {
   getAll: (userId: number) => {
-    return getDb().prepare('SELECT * FROM sequences WHERE user_id = ? ORDER BY created_at DESC').all(userId);
+    // Return: own sequences + team-shared + specifically shared with this user
+    return getDb().prepare(`
+      SELECT s.*, u.name as owner_name FROM sequences s
+      JOIN users u ON s.user_id = u.id
+      WHERE s.user_id = ?
+         OR s.visibility = 'team'
+         OR (s.visibility = 'specific' AND (',' || s.shared_with_user_ids || ',') LIKE '%,' || ? || ',%')
+      ORDER BY s.created_at DESC
+    `).all(userId, String(userId));
   },
-  getById: (id: number, userId: number) => {
-    return getDb().prepare('SELECT * FROM sequences WHERE id = ? AND user_id = ?').get(id, userId);
+  getById: (id: number, userId?: number) => {
+    // Allow access if owned, team-shared, or specifically shared
+    const seq = getDb().prepare('SELECT s.*, u.name as owner_name FROM sequences s JOIN users u ON s.user_id = u.id WHERE s.id = ?').get(id) as any;
+    if (!seq) return null;
+    if (!userId) return seq;
+    if (seq.user_id === userId) return seq;
+    if (seq.visibility === 'team') return seq;
+    if (seq.visibility === 'specific') {
+      const ids = (seq.shared_with_user_ids || '').split(',').map((s: string) => s.trim());
+      if (ids.includes(String(userId))) return seq;
+    }
+    return null;
   },
-  create: (userId: number, name: string, steps: any[]) => {
-    return getDb().prepare('INSERT INTO sequences (user_id, name, steps) VALUES (?, ?, ?)')
-      .run(userId, name, JSON.stringify(steps));
+  create: (userId: number, name: string, steps: any[], visibility?: string, sharedWithUserIds?: string) => {
+    return getDb().prepare('INSERT INTO sequences (user_id, name, steps, visibility, shared_with_user_ids) VALUES (?, ?, ?, ?, ?)')
+      .run(userId, name, JSON.stringify(steps), visibility || 'private', sharedWithUserIds || '');
   },
-  update: (id: number, userId: number, name: string, steps: any[], active: boolean) => {
-    return getDb().prepare('UPDATE sequences SET name = ?, steps = ?, active = ? WHERE id = ? AND user_id = ?')
-      .run(name, JSON.stringify(steps), active ? 1 : 0, id, userId);
+  update: (id: number, userId: number, data: { name?: string; steps?: any[]; active?: boolean; visibility?: string; shared_with_user_ids?: string }, isAdmin?: boolean) => {
+    const seq = getDb().prepare('SELECT * FROM sequences WHERE id = ?').get(id) as any;
+    if (!seq) return null;
+    if (!isAdmin && seq.user_id !== userId) return null;
+
+    const updates: string[] = [];
+    const values: any[] = [];
+    if (data.name !== undefined) { updates.push('name = ?'); values.push(data.name); }
+    if (data.steps !== undefined) { updates.push('steps = ?'); values.push(JSON.stringify(data.steps)); }
+    if (data.active !== undefined) { updates.push('active = ?'); values.push(data.active ? 1 : 0); }
+    if (data.visibility !== undefined) { updates.push('visibility = ?'); values.push(data.visibility); }
+    if (data.shared_with_user_ids !== undefined) { updates.push('shared_with_user_ids = ?'); values.push(data.shared_with_user_ids); }
+    if (updates.length === 0) return seq;
+
+    values.push(id);
+    getDb().prepare(`UPDATE sequences SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+    return getDb().prepare('SELECT * FROM sequences WHERE id = ?').get(id);
   },
-  delete: (id: number, userId: number) => {
-    return getDb().prepare('DELETE FROM sequences WHERE id = ? AND user_id = ?').run(id, userId);
+  delete: (id: number, userId: number, isAdmin?: boolean) => {
+    const seq = getDb().prepare('SELECT * FROM sequences WHERE id = ?').get(id) as any;
+    if (!seq) return false;
+    if (!isAdmin && seq.user_id !== userId) return false;
+    getDb().prepare('DELETE FROM sequences WHERE id = ?').run(id);
+    return true;
   },
 };
 

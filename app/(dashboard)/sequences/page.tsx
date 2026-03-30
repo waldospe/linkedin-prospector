@@ -12,7 +12,8 @@ import {
   DialogTrigger
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Trash2, Edit2, GitBranch, ArrowRight, Tag } from 'lucide-react';
+import { Plus, Trash2, Edit2, GitBranch, ArrowRight, Tag, Lock, Users as UsersIcon, Globe } from 'lucide-react';
+import { useUser } from '@/components/user-context';
 
 interface Step {
   action: string;
@@ -33,19 +34,32 @@ interface Sequence {
   name: string;
   steps: Step[];
   active: number;
+  user_id: number;
+  owner_name?: string;
+  visibility: string;
+  shared_with_user_ids: string;
 }
 
 export default function SequencesPage() {
   const [sequences, setSequences] = useState<Sequence[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingSequence, setEditingSequence] = useState<Sequence | null>(null);
-  const [newSequence, setNewSequence] = useState({ name: '', steps: [{ action: 'connection', template: '', delay_hours: 0 }] });
+  const [newSequence, setNewSequence] = useState({ name: '', steps: [{ action: 'connection', template: '', delay_hours: 0 }], visibility: 'private', shared_with_user_ids: '' });
+  const [teamUsers, setTeamUsers] = useState<Array<{ id: number; name: string }>>([]);
+  const { currentUser, isAdmin, apiQuery, viewAs } = useUser();
 
-  useEffect(() => { fetchSequences(); }, []);
+  useEffect(() => {
+    fetchSequences();
+    if (isAdmin) {
+      fetch('/api/users').then(r => r.json()).then(data => {
+        if (Array.isArray(data)) setTeamUsers(data);
+      });
+    }
+  }, [viewAs]);
 
   const fetchSequences = async () => {
     try {
-      const res = await fetch('/api/sequences');
+      const res = await fetch(`/api/sequences${apiQuery}`);
       setSequences(await res.json());
     } finally { setLoading(false); }
   };
@@ -54,14 +68,17 @@ export default function SequencesPage() {
     if (editingSequence) {
       await fetch(`/api/sequences/${editingSequence.id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: editingSequence.name, steps: editingSequence.steps, active: editingSequence.active }),
+        body: JSON.stringify({
+          name: editingSequence.name, steps: editingSequence.steps, active: editingSequence.active,
+          visibility: editingSequence.visibility, shared_with_user_ids: editingSequence.shared_with_user_ids,
+        }),
       });
     } else {
-      await fetch('/api/sequences', {
+      await fetch(`/api/sequences${apiQuery}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newSequence),
       });
-      setNewSequence({ name: '', steps: [{ action: 'connection', template: '', delay_hours: 0 }] });
+      setNewSequence({ name: '', steps: [{ action: 'connection', template: '', delay_hours: 0 }], visibility: 'private', shared_with_user_ids: '' });
     }
     setEditingSequence(null);
     fetchSequences();
@@ -157,6 +174,78 @@ export default function SequencesPage() {
     </div>
   );
 
+  const visibilityOptions = [
+    { value: 'private', label: 'Private', icon: Lock, desc: 'Only you' },
+    { value: 'team', label: 'Shared with Team', icon: Globe, desc: 'Everyone on your team' },
+    { value: 'specific', label: 'Specific Users', icon: UsersIcon, desc: 'Choose who can see it' },
+  ];
+
+  const renderVisibility = (
+    vis: string,
+    sharedIds: string,
+    onVisChange: (v: string) => void,
+    onIdsChange: (ids: string) => void
+  ) => (
+    <div className="space-y-2">
+      <label className="text-xs font-medium text-muted-foreground block">Sharing</label>
+      <div className="flex gap-2">
+        {visibilityOptions.map(opt => {
+          const Icon = opt.icon;
+          const isActive = vis === opt.value;
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => onVisChange(opt.value)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                isActive
+                  ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                  : 'bg-secondary/50 text-muted-foreground border-border hover:text-white hover:bg-secondary'
+              }`}
+            >
+              <Icon size={12} />
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
+      {vis === 'specific' && teamUsers.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          {teamUsers.filter(u => u.id !== currentUser?.id).map(u => {
+            const selected = (',' + sharedIds + ',').includes(',' + u.id + ',');
+            return (
+              <button
+                key={u.id}
+                type="button"
+                onClick={() => {
+                  const ids = sharedIds ? sharedIds.split(',').map(s => s.trim()).filter(Boolean) : [];
+                  if (selected) {
+                    onIdsChange(ids.filter(id => id !== String(u.id)).join(','));
+                  } else {
+                    onIdsChange([...ids, String(u.id)].join(','));
+                  }
+                }}
+                className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-all ${
+                  selected
+                    ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                    : 'bg-secondary/50 text-muted-foreground border-border hover:text-white'
+                }`}
+              >
+                {u.name}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
+  const getVisibilityBadge = (seq: Sequence) => {
+    if (seq.visibility === 'team') return { label: 'Team', color: 'text-violet-400 bg-violet-500/10 border-violet-500/15' };
+    if (seq.visibility === 'specific') return { label: 'Shared', color: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/15' };
+    return null;
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -178,6 +267,12 @@ export default function SequencesPage() {
               <button onClick={() => addStep(null)} className="w-full py-2 rounded-lg border border-dashed border-border text-sm text-muted-foreground hover:text-white hover:border-border/80 transition-all">
                 <Plus size={14} className="inline mr-1" /> Add Step
               </button>
+              {renderVisibility(
+                newSequence.visibility,
+                newSequence.shared_with_user_ids,
+                (v) => setNewSequence({ ...newSequence, visibility: v }),
+                (ids) => setNewSequence({ ...newSequence, shared_with_user_ids: ids }),
+              )}
               <button onClick={saveSequence} className="w-full h-10 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 transition-all">
                 Save Sequence
               </button>
@@ -211,6 +306,17 @@ export default function SequencesPage() {
                   }`}>
                     {seq.active ? 'Active' : 'Inactive'}
                   </span>
+                  {(() => {
+                    const badge = getVisibilityBadge(seq);
+                    return badge ? (
+                      <span className={`text-[10px] font-medium px-2 py-0.5 rounded-md border ${badge.color}`}>
+                        {badge.label}
+                      </span>
+                    ) : null;
+                  })()}
+                  {seq.owner_name && seq.user_id !== currentUser?.id && (
+                    <span className="text-[10px] text-muted-foreground">by {seq.owner_name}</span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <Switch
@@ -259,6 +365,12 @@ export default function SequencesPage() {
               <button onClick={() => addStep(editingSequence)} className="w-full py-2 rounded-lg border border-dashed border-border text-sm text-muted-foreground hover:text-white hover:border-border/80 transition-all">
                 <Plus size={14} className="inline mr-1" /> Add Step
               </button>
+              {(editingSequence.user_id === currentUser?.id || isAdmin) && renderVisibility(
+                editingSequence.visibility || 'private',
+                editingSequence.shared_with_user_ids || '',
+                (v) => setEditingSequence({ ...editingSequence, visibility: v }),
+                (ids) => setEditingSequence({ ...editingSequence, shared_with_user_ids: ids }),
+              )}
               <button onClick={saveSequence} className="w-full h-10 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 transition-all">
                 Save Changes
               </button>
