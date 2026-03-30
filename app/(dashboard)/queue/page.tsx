@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Clock, CheckCircle2, AlertCircle, Pause, ListTodo, Trash2, RefreshCw, X } from 'lucide-react';
+import { useUser } from '@/components/user-context';
 
 interface QueueItem {
   id: number;
@@ -26,12 +27,13 @@ const statusConfig: Record<string, { icon: any; color: string; bg: string; label
 export default function QueuePage() {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const { apiQuery, viewAs } = useUser();
 
-  useEffect(() => { fetchQueue(); }, []);
+  useEffect(() => { fetchQueue(); }, [viewAs]);
 
   const fetchQueue = async () => {
     try {
-      const res = await fetch('/api/queue');
+      const res = await fetch(`/api/queue${apiQuery}`);
       setQueue(await res.json());
     } finally { setLoading(false); }
   };

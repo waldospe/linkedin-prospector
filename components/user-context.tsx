@@ -16,11 +16,22 @@ interface User {
   send_schedule: any;
 }
 
+// viewAs: null = viewing as yourself, number = viewing as that user, 'all' = team aggregate
+type ViewAs = null | number | 'all';
+
 interface UserContextType {
   currentUser: User | null;
   isAdmin: boolean;
   loading: boolean;
   refreshUser: () => Promise<void>;
+  // View-as functionality
+  viewAs: ViewAs;
+  setViewAs: (v: ViewAs) => void;
+  viewingUser: User | null; // the user being viewed (or currentUser if null)
+  teamUsers: User[];
+  isViewingAll: boolean;
+  // Helper to append view_as to API calls
+  apiQuery: string;
 }
 
 const UserContext = createContext<UserContextType>({
@@ -28,11 +39,19 @@ const UserContext = createContext<UserContextType>({
   isAdmin: false,
   loading: true,
   refreshUser: async () => {},
+  viewAs: null,
+  setViewAs: () => {},
+  viewingUser: null,
+  teamUsers: [],
+  isViewingAll: false,
+  apiQuery: '',
 });
 
 export function UserProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [viewAs, setViewAs] = useState<ViewAs>(null);
+  const [teamUsers, setTeamUsers] = useState<User[]>([]);
 
   const fetchCurrentUser = async () => {
     try {
@@ -40,6 +59,14 @@ export function UserProvider({ children }: { children: ReactNode }) {
       if (res.ok) {
         const user = await res.json();
         setCurrentUser(user);
+        // If admin, fetch team users
+        if (user.role === 'admin') {
+          const usersRes = await fetch('/api/users');
+          if (usersRes.ok) {
+            const users = await usersRes.json();
+            if (Array.isArray(users)) setTeamUsers(users);
+          }
+        }
       } else {
         setCurrentUser(null);
       }
@@ -54,12 +81,27 @@ export function UserProvider({ children }: { children: ReactNode }) {
     fetchCurrentUser();
   }, []);
 
+  const isAdmin = currentUser?.role === 'admin';
+  const isViewingAll = viewAs === 'all';
+  const viewingUser = viewAs === null || viewAs === 'all'
+    ? currentUser
+    : teamUsers.find(u => u.id === viewAs) || currentUser;
+
+  // Query string to append to API calls
+  const apiQuery = viewAs === null ? '' : viewAs === 'all' ? '?view_as=all' : `?view_as=${viewAs}`;
+
   return (
     <UserContext.Provider value={{
       currentUser,
-      isAdmin: currentUser?.role === 'admin',
+      isAdmin,
       loading,
       refreshUser: fetchCurrentUser,
+      viewAs,
+      setViewAs,
+      viewingUser,
+      teamUsers,
+      isViewingAll,
+      apiQuery,
     }}>
       {children}
     </UserContext.Provider>

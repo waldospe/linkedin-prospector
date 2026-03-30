@@ -22,3 +22,31 @@ export function requireAdmin(req: NextRequest): RequestUser {
   }
   return user;
 }
+
+/**
+ * Get the effective user ID for data queries, supporting admin view-as.
+ * Returns { effectiveUserId, isAll } where:
+ * - effectiveUserId: the user to query data for (or the admin's own ID)
+ * - isAll: true if admin is viewing aggregated team data
+ *
+ * Only admins can use view_as. Regular users always see their own data.
+ */
+export function getEffectiveUser(req: NextRequest): { userId: number; role: string; effectiveUserId: number | null; isAll: boolean } {
+  const { userId, role } = getUserFromRequest(req);
+  const viewAs = req.nextUrl.searchParams.get('view_as');
+
+  if (role !== 'admin' || !viewAs) {
+    return { userId, role, effectiveUserId: userId, isAll: false };
+  }
+
+  if (viewAs === 'all') {
+    return { userId, role, effectiveUserId: null, isAll: true };
+  }
+
+  const targetId = parseInt(viewAs);
+  if (isNaN(targetId)) {
+    return { userId, role, effectiveUserId: userId, isAll: false };
+  }
+
+  return { userId, role, effectiveUserId: targetId, isAll: false };
+}

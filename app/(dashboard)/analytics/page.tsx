@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid } from 'recharts';
 import { TrendingUp, Send, MessageCircle, Reply, BarChart3, Users } from 'lucide-react';
 import { POSITIVE_STAGES, NEGATIVE_STAGES, STAGE_MAP, stageColors } from '@/lib/constants';
+import { useUser } from '@/components/user-context';
 
 interface Stats {
   daily: Array<{
@@ -23,16 +24,18 @@ export default function AnalyticsPage() {
   const [stats, setStats] = useState<Stats>({ daily: [], today: { connections_sent: 0, messages_sent: 0, replies_received: 0 } });
   const [funnel, setFunnel] = useState<Array<{ status: string; count: number }>>([]);
   const [loading, setLoading] = useState(true);
+  const { apiQuery, viewAs, isViewingAll } = useUser();
 
   useEffect(() => {
+    const sep = apiQuery.includes('?') ? '&' : '?';
     Promise.all([
-      fetch('/api/stats?days=30').then(r => r.json()),
-      fetch('/api/contacts/funnel').then(r => r.json()),
+      fetch(`/api/stats${apiQuery}${sep}days=30`).then(r => r.json()),
+      fetch(`/api/contacts/funnel${apiQuery}`).then(r => r.json()),
     ]).then(([statsData, funnelData]) => {
       setStats(statsData);
       setFunnel(Array.isArray(funnelData) ? funnelData : []);
     }).finally(() => setLoading(false));
-  }, []);
+  }, [viewAs]);
 
   const chartData = stats.daily.slice(0, 14).reverse().map(day => ({
     date: new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),

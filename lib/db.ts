@@ -364,10 +364,18 @@ export const globalConfig = {
   },
 };
 
-// Contacts (always scoped to user)
+// Contacts (always scoped to user, or all for team view)
 export const contacts = {
   getAll: (userId: number) => {
     return getDb().prepare('SELECT * FROM contacts WHERE user_id = ? ORDER BY created_at DESC').all(userId);
+  },
+  getAllTeam: (teamId?: number) => {
+    return getDb().prepare(`
+      SELECT c.*, u.name as user_name FROM contacts c
+      JOIN users u ON c.user_id = u.id
+      ${teamId ? 'WHERE u.team_id = ?' : ''}
+      ORDER BY c.created_at DESC
+    `).all(...(teamId ? [teamId] : []));
   },
   getById: (id: number, userId: number) => {
     return getDb().prepare('SELECT * FROM contacts WHERE id = ? AND user_id = ?').get(id, userId);
@@ -449,6 +457,15 @@ export const contacts = {
       GROUP BY status
     `).all(userId) as Array<{ status: string; count: number }>;
   },
+  getFunnelCountsTeam: (teamId?: number) => {
+    return getDb().prepare(`
+      SELECT c.status, COUNT(*) as count
+      FROM contacts c
+      JOIN users u ON c.user_id = u.id
+      ${teamId ? 'WHERE u.team_id = ?' : ''}
+      GROUP BY c.status
+    `).all(...(teamId ? [teamId] : [])) as Array<{ status: string; count: number }>;
+  },
 };
 
 // Sequences (scoped to user)
@@ -484,6 +501,17 @@ export const queue = {
       WHERE q.user_id = ?
       ORDER BY q.scheduled_at
     `).all(userId);
+  },
+  getAllTeam: (teamId?: number) => {
+    return getDb().prepare(`
+      SELECT q.*, c.name as contact_name, c.linkedin_url, s.name as sequence_name, u.name as user_name
+      FROM queue q
+      JOIN contacts c ON q.contact_id = c.id
+      LEFT JOIN sequences s ON q.sequence_id = s.id
+      JOIN users u ON q.user_id = u.id
+      ${teamId ? 'WHERE u.team_id = ?' : ''}
+      ORDER BY q.scheduled_at
+    `).all(...(teamId ? [teamId] : []));
   },
   getPending: (userId: number) => {
     return getDb().prepare(`
@@ -617,6 +645,16 @@ export const stats = {
       ORDER BY date DESC
     `).all(userId, days);
   },
+  getDailyTeam: (days: number = 30, teamId?: number) => {
+    return getDb().prepare(`
+      SELECT date, SUM(connections_sent) as connections_sent, SUM(messages_sent) as messages_sent, SUM(replies_received) as replies_received
+      FROM daily_stats ds
+      JOIN users u ON ds.user_id = u.id
+      ${teamId ? 'WHERE u.team_id = ?' : ''}
+      AND date >= date('now', '-' || ? || ' days')
+      GROUP BY date ORDER BY date DESC
+    `).all(...(teamId ? [teamId, days] : [days]));
+  },
   getToday: (userId: number) => {
     const today = new Date().toISOString().split('T')[0];
     const row = getDb().prepare('SELECT * FROM daily_stats WHERE date = ? AND user_id = ?').get(today, userId) as any;
@@ -625,6 +663,15 @@ export const stats = {
       return { date: today, user_id: userId, connections_sent: 0, messages_sent: 0, replies_received: 0 };
     }
     return row;
+  },
+  getTodayTeam: (teamId?: number) => {
+    const today = new Date().toISOString().split('T')[0];
+    const row = getDb().prepare(`
+      SELECT ? as date, COALESCE(SUM(connections_sent),0) as connections_sent, COALESCE(SUM(messages_sent),0) as messages_sent, COALESCE(SUM(replies_received),0) as replies_received
+      FROM daily_stats ds JOIN users u ON ds.user_id = u.id
+      WHERE date = ? ${teamId ? 'AND u.team_id = ?' : ''}
+    `).get(...(teamId ? [today, today, teamId] : [today, today])) as any;
+    return row || { date: today, connections_sent: 0, messages_sent: 0, replies_received: 0 };
   },
   increment: (field: 'connections_sent' | 'messages_sent' | 'replies_received', userId: number) => {
     const today = new Date().toISOString().split('T')[0];

@@ -12,6 +12,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Trash2, Upload, ExternalLink, Search, Users, FileSpreadsheet, Link2, CheckCircle2, AlertCircle, ArrowRight, Filter, GitBranch } from 'lucide-react';
 import { FUNNEL_STAGES, stageColors, STAGE_MAP } from '@/lib/constants';
+import { useUser } from '@/components/user-context';
 
 interface Contact {
   id: number;
@@ -65,17 +66,18 @@ export default function ContactsPage() {
   const [sheetsUrl, setSheetsUrl] = useState('');
   const [lookingUp, setLookingUp] = useState(false);
   const [lookupError, setLookupError] = useState('');
+  const { apiQuery, viewAs, isViewingAll } = useUser();
 
   useEffect(() => {
     fetchContacts();
     fetch('/api/sequences').then(r => r.json()).then(data => {
       if (Array.isArray(data)) setSequencesList(data.filter((s: any) => s.active));
     });
-  }, []);
+  }, [viewAs]);
 
   const fetchContacts = async () => {
     try {
-      const res = await fetch('/api/contacts');
+      const res = await fetch(`/api/contacts${apiQuery}`);
       setContacts(await res.json());
     } finally { setLoading(false); }
   };

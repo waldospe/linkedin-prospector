@@ -30,7 +30,7 @@ interface QueueItem {
 }
 
 export default function DashboardPage() {
-  const { currentUser } = useUser();
+  const { currentUser, viewAs, viewingUser, isViewingAll, apiQuery } = useUser();
   const [stats, setStats] = useState<Stats>({ today: { connections_sent: 0, messages_sent: 0, replies_received: 0 } });
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [funnel, setFunnel] = useState<Array<{ status: string; count: number }>>([]);
@@ -38,14 +38,15 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (currentUser) fetchData();
-  }, [currentUser]);
+  }, [currentUser, viewAs]);
 
   const fetchData = async () => {
     try {
+      const q = apiQuery;
       const [statsRes, queueRes, funnelRes] = await Promise.all([
-        fetch('/api/stats'),
-        fetch('/api/queue'),
-        fetch('/api/contacts/funnel'),
+        fetch(`/api/stats${q}`),
+        fetch(`/api/queue${q}`),
+        fetch(`/api/contacts/funnel${q}`),
       ]);
       const [statsData, queueData, funnelData] = await Promise.all([
         statsRes.json(), queueRes.json(), funnelRes.json(),
@@ -92,9 +93,11 @@ export default function DashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-white tracking-tight">
-            Welcome back{currentUser ? `, ${currentUser.name}` : ''}
+            {isViewingAll ? 'Team Overview' : `Welcome back${viewingUser ? `, ${viewingUser.name}` : ''}`}
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">Here&apos;s your outreach activity for today</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            {isViewingAll ? 'Aggregated outreach activity across your team' : "Here's your outreach activity for today"}
+          </p>
         </div>
         <div className="flex items-center gap-3">
           {pendingCount > 0 && (

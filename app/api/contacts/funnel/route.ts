@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserFromRequest } from '@/lib/api-auth';
-import { contacts } from '@/lib/db';
+import { getEffectiveUser } from '@/lib/api-auth';
+import { contacts, users } from '@/lib/db';
 
 export async function GET(req: NextRequest) {
   try {
-    const { userId } = getUserFromRequest(req);
-    const counts = contacts.getFunnelCounts(userId);
-    return NextResponse.json(counts);
+    const { effectiveUserId, isAll, userId } = getEffectiveUser(req);
+    if (isAll) {
+      const user = users.getById(userId) as any;
+      return NextResponse.json(contacts.getFunnelCountsTeam(user?.team_id));
+    }
+    return NextResponse.json(contacts.getFunnelCounts(effectiveUserId!));
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch funnel data' }, { status: 500 });
   }
