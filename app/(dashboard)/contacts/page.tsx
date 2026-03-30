@@ -156,16 +156,22 @@ export default function ContactsPage() {
 
   const bulkAssignSequence = async () => {
     if (!bulkSequenceId || selectedIds.size === 0) return;
-    const seqId = parseInt(bulkSequenceId);
-    await Promise.all(
-      Array.from(selectedIds).map(id =>
-        fetch(`/api/contacts/${id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sequence_id: seqId }),
-        })
-      )
-    );
+    try {
+      const res = await fetch(`/api/contacts/bulk-sequence${apiQuery}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ids: Array.from(selectedIds),
+          sequence_id: parseInt(bulkSequenceId),
+        }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        alert(data.error);
+      }
+    } catch {
+      alert('Failed to assign sequence');
+    }
     setSelectedIds(new Set());
     setBulkSequenceId('');
     fetchContacts();
