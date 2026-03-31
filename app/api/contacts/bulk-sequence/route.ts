@@ -43,9 +43,17 @@ export async function POST(req: NextRequest) {
       const c = contacts.getById(contactId, userId!) as any;
       if (!c) continue;
 
-      const messageText = steps[0].template
-        ? substituteVariables(steps[0].template, c)
-        : '';
+      // A/B testing: if step has variants, randomly pick one
+      let messageText = '';
+      let variantLabel: string | undefined;
+      const step = steps[0];
+      if (step.variants && Array.isArray(step.variants) && step.variants.length > 0) {
+        const variant = step.variants[Math.floor(Math.random() * step.variants.length)];
+        messageText = variant.template ? substituteVariables(variant.template, c) : '';
+        variantLabel = variant.label || `V${step.variants.indexOf(variant) + 1}`;
+      } else {
+        messageText = step.template ? substituteVariables(step.template, c) : '';
+      }
 
       // Spread across days with random jitter
       const dayOffset = Math.floor(i / dailyLimit);
@@ -59,9 +67,10 @@ export async function POST(req: NextRequest) {
         contact_id: contactId,
         sequence_id: sequence_id,
         step_number: 1,
-        action_type: steps[0].action,
+        action_type: step.action,
         message_text: messageText,
         scheduled_at: scheduledAt.toISOString(),
+        template_variant: variantLabel,
       });
       contacts.updateStatus(contactId, 'queued', userId!);
       queued++;

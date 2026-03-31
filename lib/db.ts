@@ -38,7 +38,7 @@ function initDb() {
       db.exec(`DROP TABLE IF EXISTS ${t}`);
     }
     db.exec('DELETE FROM schema_version');
-    db.exec('INSERT INTO schema_version (version) VALUES (7)');
+    db.exec('INSERT INTO schema_version (version) VALUES (8)');
   }
 
   if (currentVersion >= 2 && currentVersion < 4) {
@@ -92,6 +92,28 @@ function initDb() {
     }
     db.exec('UPDATE schema_version SET version = 7');
   }
+
+  if (currentVersion === 7) {
+    // v7 -> v8: Add A/B testing columns to queue
+    const qCols = db.pragma('table_info(queue)') as any[];
+    if (qCols && !qCols.find((c: any) => c.name === 'template_variant')) {
+      db.exec(`ALTER TABLE queue ADD COLUMN template_variant TEXT`);
+    }
+    db.exec('UPDATE schema_version SET version = 8');
+  }
+
+  // Activity log
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS activity_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER REFERENCES users(id),
+      action TEXT NOT NULL,
+      entity_type TEXT,
+      entity_id INTEGER,
+      details TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
 
   // Teams
   db.exec(`
@@ -176,6 +198,7 @@ function initDb() {
       action_type TEXT NOT NULL,
       status TEXT DEFAULT 'pending',
       message_text TEXT,
+      template_variant TEXT,
       scheduled_at DATETIME,
       executed_at DATETIME,
       error TEXT
@@ -615,11 +638,11 @@ export const queue = {
       ORDER BY q.scheduled_at
     `).all(userId);
   },
-  create: (userId: number, data: { contact_id: number; sequence_id?: number; step_number?: number; action_type: string; message_text?: string; scheduled_at?: string }) => {
+  create: (userId: number, data: { contact_id: number; sequence_id?: number; step_number?: number; action_type: string; message_text?: string; scheduled_at?: string; template_variant?: string }) => {
     return getDb().prepare(`
-      INSERT INTO queue (user_id, contact_id, sequence_id, step_number, action_type, message_text, scheduled_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(userId, data.contact_id, data.sequence_id || null, data.step_number || 1, data.action_type, data.message_text || null, data.scheduled_at || null);
+      INSERT INTO queue (user_id, contact_id, sequence_id, step_number, action_type, message_text, scheduled_at, template_variant)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(userId, data.contact_id, data.sequence_id || null, data.step_number || 1, data.action_type, data.message_text || null, data.scheduled_at || null, data.template_variant || null);
   },
   updateStatus: (id: number, status: string, userId: number, error?: string) => {
     if (error) {
@@ -785,5 +808,27 @@ export const accounts = {
   updateStatus: (id: string, status: string) => {
     return getDb().prepare('UPDATE accounts SET status = ?, last_check = CURRENT_TIMESTAMP WHERE unipile_account_id = ?')
       .run(status, id);
+  },
+};
+
+// Activity Log
+export const activityLog = {
+  log: (userId: number, action: string, entityType?: string, entityId?: number, details?: string) => {
+    return getDb().prepare('INSERT INTO activity_log (user_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?)')
+      .run(userId, action, entityType || null, entityId || null, details || null);
+  },
+  getRecent: (limit: number = 50, userId?: number) => {
+    if (userId) {
+      return getDb().prepare(`
+        SELECT al.*, u.name as user_name FROM activity_log al
+        JOIN users u ON al.user_id = u.id
+        WHERE al.user_id = ? ORDER BY al.created_at DESC LIMIT ?
+      `).all(userId, limit);
+    }
+    return getDb().prepare(`
+      SELECT al.*, u.name as user_name FROM activity_log al
+      JOIN users u ON al.user_id = u.id
+      ORDER BY al.created_at DESC LIMIT ?
+    `).all(limit);
   },
 };
