@@ -56,7 +56,10 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const { userId } = getUserFromRequest(req);
-    contacts.delete(Number(params.id), userId);
+    const contactId = Number(params.id);
+    // Clean up queue items first
+    queue.deleteByContact(contactId, userId);
+    contacts.delete(contactId, userId);
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to delete contact' }, { status: 500 });

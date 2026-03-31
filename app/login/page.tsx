@@ -11,6 +11,8 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [forgotMode, setForgotMode] = useState(false);
+  const [forgotSent, setForgotSent] = useState(false);
   const [teams, setTeams] = useState<Array<{ id: number; name: string }>>([]);
   const [selectedTeam, setSelectedTeam] = useState('');
   const [newTeamName, setNewTeamName] = useState('');
@@ -171,6 +173,38 @@ export default function LoginPage() {
             </div>
           )}
 
+          {mode === 'login' && !forgotMode && (
+            <button onClick={() => setForgotMode(true)} className="text-xs text-muted-foreground hover:text-blue-400 transition-colors self-end">
+              Forgot password?
+            </button>
+          )}
+
+          {forgotMode ? (
+            <>
+              {forgotSent ? (
+                <div className="flex items-center gap-2 px-3 py-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                  <p className="text-emerald-400 text-sm">If that email exists, a reset link has been sent. Check your inbox.</p>
+                </div>
+              ) : (
+                <button
+                  onClick={async () => {
+                    if (!email) { setError('Enter your email first'); return; }
+                    setLoading(true);
+                    await fetch('/api/auth/forgot-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
+                    setForgotSent(true);
+                    setLoading(false);
+                  }}
+                  disabled={loading || !email}
+                  className="w-full h-11 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 disabled:opacity-40 transition-all"
+                >
+                  {loading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mx-auto" /> : 'Send Reset Link'}
+                </button>
+              )}
+              <button onClick={() => { setForgotMode(false); setForgotSent(false); setError(''); }} className="text-xs text-muted-foreground hover:text-white transition-colors text-center">
+                Back to sign in
+              </button>
+            </>
+          ) : (
           <button
             onClick={mode === 'login' ? handleLogin : handleSignup}
             disabled={loading || !email || !password || (mode === 'signup' && !name)}
@@ -185,6 +219,7 @@ export default function LoginPage() {
               </>
             )}
           </button>
+          )}
         </div>
 
         <p className="text-center text-sm text-muted-foreground mt-6">

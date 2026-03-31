@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { queue, contacts, stats, users, globalConfig, templates, messages, sequences } from '@/lib/db';
 import { substituteVariables } from '@/lib/constants';
+import { sendAlertEmail } from '@/lib/email';
+
+// Track error rate for alerting
+let consecutiveEmptyCycles = 0;
+let lastAlertSent = 0;
 
 // Auto-process queue for ALL users who are within their send window and under daily limits.
 // Called by a cron job every 2-3 minutes. No auth required — secured by a secret token.
@@ -263,6 +268,14 @@ export async function POST(req: NextRequest) {
       if (processed.length > 0 || skipped.length > 0 || errors.length > 0 || monitored > 0) {
         results.push({ user: user.name, processed: processed.length, skipped: skipped.length, errors, monitored });
       }
+    }
+
+    // Alert on high error rates (more than 5 errors in one cycle, max 1 alert per hour)
+    const totalErrors = results.reduce((s, r) => s + r.errors.length, 0);
+    if (totalErrors > 5 && Date.now() - lastAlertSent > 3600000) {
+      lastAlertSent = Date.now();
+      const errorSummary = results.flatMap(r => r.errors.map(e => `${r.user}: ${e}`)).join('\n');
+      sendAlertEmail({ subject: `${totalErrors} queue errors this cycle`, body: errorSummary }).catch(() => {});
     }
 
     return NextResponse.json({ results, timestamp: new Date().toISOString() });

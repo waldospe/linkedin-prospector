@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createToken } from '@/lib/auth';
 import { users } from '@/lib/db';
+import { checkRateLimit } from '@/lib/rate-limit';
 
 export async function POST(req: NextRequest) {
   try {
@@ -8,6 +9,13 @@ export async function POST(req: NextRequest) {
 
     if (!email || !password) {
       return NextResponse.json({ error: 'Email and password required' }, { status: 400 });
+    }
+
+    // Rate limit: 5 attempts per 15 minutes per email
+    const ip = req.headers.get('x-forwarded-for') || 'unknown';
+    const limit = checkRateLimit(`login:${email}:${ip}`, 5, 900000);
+    if (!limit.allowed) {
+      return NextResponse.json({ error: `Too many attempts. Try again in ${limit.retryAfter} seconds.` }, { status: 429 });
     }
 
     const user = users.verifyPassword(email, password);

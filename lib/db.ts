@@ -634,6 +634,9 @@ export const queue = {
   clearFailed: (userId: number) => {
     return getDb().prepare('DELETE FROM queue WHERE user_id = ? AND status = ?').run(userId, 'failed');
   },
+  deleteByContact: (contactId: number, userId: number) => {
+    return getDb().prepare('DELETE FROM queue WHERE contact_id = ? AND user_id = ?').run(contactId, userId);
+  },
   getLastCompletedForContact: (userId: number, contactId: number) => {
     return getDb().prepare(`
       SELECT q.*, s.steps as sequence_steps FROM queue q
