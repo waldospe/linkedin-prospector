@@ -14,6 +14,7 @@ import {
   Zap,
   UserCog,
   Eye,
+  Server,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/components/user-context';
@@ -141,6 +142,18 @@ export default function Navigation() {
             >
               <UserCog size={16} strokeWidth={pathname === '/users' ? 2 : 1.5} />
               Team
+            </Link>
+            <Link
+              href="/admin"
+              className={cn(
+                "flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors",
+                pathname === '/admin'
+                  ? "bg-blue-600/15 text-blue-400"
+                  : "text-[hsl(220,10%,60%)] hover:text-white hover:bg-[hsl(228,13%,14%)]"
+              )}
+            >
+              <Server size={16} strokeWidth={pathname === '/admin' ? 2 : 1.5} />
+              Admin
             </Link>
           </>
         )}
