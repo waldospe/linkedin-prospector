@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid } from 'recharts';
-import { TrendingUp, Send, MessageCircle, Reply, BarChart3, Users } from 'lucide-react';
+import { TrendingUp, Send, MessageCircle, Reply, BarChart3, Users, Clock } from 'lucide-react';
 import { POSITIVE_STAGES, NEGATIVE_STAGES, STAGE_MAP, stageColors } from '@/lib/constants';
 import { useUser } from '@/components/user-context';
 
@@ -23,6 +23,7 @@ interface Stats {
 export default function AnalyticsPage() {
   const [stats, setStats] = useState<Stats>({ daily: [], today: { connections_sent: 0, messages_sent: 0, replies_received: 0 } });
   const [funnel, setFunnel] = useState<Array<{ status: string; count: number }>>([]);
+  const [smartSchedule, setSmartSchedule] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const { apiQuery, viewAs, isViewingAll } = useUser();
 
@@ -31,9 +32,11 @@ export default function AnalyticsPage() {
     Promise.all([
       fetch(`/api/stats${apiQuery}${sep}days=30`).then(r => r.json()),
       fetch(`/api/contacts/funnel${apiQuery}`).then(r => r.json()),
-    ]).then(([statsData, funnelData]) => {
+      fetch('/api/smart-schedule').then(r => r.json()).catch(() => null),
+    ]).then(([statsData, funnelData, scheduleData]) => {
       setStats(statsData);
       setFunnel(Array.isArray(funnelData) ? funnelData : []);
+      setSmartSchedule(scheduleData);
     }).finally(() => setLoading(false));
   }, [viewAs]);
 
@@ -231,6 +234,57 @@ export default function AnalyticsPage() {
           </div>
         </div>
       </div>
+      {/* Smart Scheduling Insights */}
+      {smartSchedule && (
+        <div className="glass rounded-xl p-5">
+          <div className="flex items-center gap-2 mb-5">
+            <Clock size={16} className="text-muted-foreground" />
+            <span className="text-sm font-medium text-white">Smart Scheduling Insights</span>
+          </div>
+          {smartSchedule.recommendation && (
+            <p className="text-sm text-blue-400 mb-4 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/15">
+              {smartSchedule.recommendation}
+            </p>
+          )}
+          <div className="grid grid-cols-2 gap-6">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Response Rate by Hour</p>
+              <div className="space-y-1.5">
+                {(smartSchedule.hourlyRates || []).filter((h: any) => h.sent > 0).slice(0, 12).map((h: any) => (
+                  <div key={h.hour} className="flex items-center gap-2">
+                    <span className="text-[11px] text-muted-foreground w-12 tabular-nums">{h.hour}:00</span>
+                    <div className="flex-1 h-1.5 bg-secondary rounded-full overflow-hidden">
+                      <div className="h-full bg-blue-500 rounded-full" style={{ width: `${Math.min(h.rate, 100)}%` }} />
+                    </div>
+                    <span className="text-[11px] text-white tabular-nums w-12 text-right">{h.rate.toFixed(0)}%</span>
+                    <span className="text-[10px] text-muted-foreground w-8">({h.sent})</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Response Rate by Day</p>
+              <div className="space-y-1.5">
+                {(smartSchedule.dowRates || []).map((d: any) => (
+                  <div key={d.day} className="flex items-center gap-2">
+                    <span className="text-[11px] text-muted-foreground w-8">{d.day}</span>
+                    <div className="flex-1 h-1.5 bg-secondary rounded-full overflow-hidden">
+                      <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${Math.min(d.rate, 100)}%` }} />
+                    </div>
+                    <span className="text-[11px] text-white tabular-nums w-12 text-right">{d.rate.toFixed(0)}%</span>
+                    <span className="text-[10px] text-muted-foreground w-8">({d.sent})</span>
+                  </div>
+                ))}
+              </div>
+              {smartSchedule.avgResponseHours && (
+                <p className="text-xs text-muted-foreground mt-4">
+                  Avg response time: <span className="text-white font-medium">{smartSchedule.avgResponseHours}h</span>
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

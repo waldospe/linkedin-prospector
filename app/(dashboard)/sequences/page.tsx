@@ -15,10 +15,16 @@ import { Textarea } from '@/components/ui/textarea';
 import { Plus, Trash2, Edit2, GitBranch, ArrowRight, Tag, Lock, Users as UsersIcon, Globe } from 'lucide-react';
 import { useUser } from '@/components/user-context';
 
+interface Variant {
+  label: string;
+  template: string;
+}
+
 interface Step {
   action: string;
   template: string;
   delay_hours: number;
+  variants?: Variant[];
 }
 
 const AVAILABLE_VARS = [
@@ -156,19 +162,75 @@ export default function SequencesPage() {
             </div>
           </div>
 
-          {/* Message textarea */}
-          <div>
-            <textarea
-              placeholder={step.action === 'connection'
-                ? "Hi {{firstName}}, I'd love to connect..."
-                : "Hey {{firstName}}, following up on my connection request..."}
-              value={step.template}
-              onChange={(e) => updateStep(seq, i, 'template', e.target.value)}
-              rows={4}
-              className="w-full bg-secondary/50 border border-border rounded-lg px-3 py-2 text-sm text-white placeholder:text-muted-foreground/40 focus:outline-none focus:border-blue-500/50 resize-y min-h-[80px]"
-            />
-            <p className="text-[10px] text-muted-foreground mt-1">Variables like {'{{firstName}}'} are replaced with contact data when sent</p>
-          </div>
+          {/* Message — single or A/B variants */}
+          {step.variants && step.variants.length > 0 ? (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-[11px] font-medium text-muted-foreground">A/B Test Variants</label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const variants = [...(step.variants || []), { label: String.fromCharCode(65 + (step.variants?.length || 0)), template: '' }];
+                    updateStep(seq, i, 'variants', variants);
+                  }}
+                  className="text-[10px] text-blue-400 hover:text-blue-300"
+                >
+                  + Add Variant
+                </button>
+              </div>
+              {step.variants.map((v, vi) => (
+                <div key={vi} className="relative">
+                  <span className="absolute top-2 left-2 text-[10px] font-bold text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded">{v.label}</span>
+                  <textarea
+                    value={v.template}
+                    onChange={(e) => {
+                      const variants = [...(step.variants || [])];
+                      variants[vi] = { ...variants[vi], template: e.target.value };
+                      updateStep(seq, i, 'variants', variants);
+                    }}
+                    rows={3}
+                    className="w-full bg-secondary/50 border border-border rounded-lg pl-10 pr-3 py-2 text-sm text-white placeholder:text-muted-foreground/40 focus:outline-none focus:border-blue-500/50 resize-y min-h-[60px]"
+                    placeholder={`Variant ${v.label} message...`}
+                  />
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => { updateStep(seq, i, 'variants', undefined); }}
+                className="text-[10px] text-muted-foreground hover:text-white"
+              >
+                Switch to single message
+              </button>
+            </div>
+          ) : (
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-[11px] font-medium text-muted-foreground">Message</label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateStep(seq, i, 'variants', [
+                      { label: 'A', template: step.template || '' },
+                      { label: 'B', template: '' },
+                    ]);
+                  }}
+                  className="text-[10px] text-blue-400 hover:text-blue-300"
+                >
+                  Enable A/B Test
+                </button>
+              </div>
+              <textarea
+                placeholder={step.action === 'connection'
+                  ? "Hi {{firstName}}, I'd love to connect..."
+                  : "Hey {{firstName}}, following up on my connection request..."}
+                value={step.template}
+                onChange={(e) => updateStep(seq, i, 'template', e.target.value)}
+                rows={4}
+                className="w-full bg-secondary/50 border border-border rounded-lg px-3 py-2 text-sm text-white placeholder:text-muted-foreground/40 focus:outline-none focus:border-blue-500/50 resize-y min-h-[80px]"
+              />
+              <p className="text-[10px] text-muted-foreground mt-1">Variables like {'{{firstName}}'} are replaced with contact data when sent</p>
+            </div>
+          )}
         </div>
       ))}
     </div>

@@ -39,14 +39,40 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       return NextResponse.json({ success: true });
     }
 
-    // Handle status update
-    if (data.status) {
-      contacts.updateStatus(contactId, data.status, userId);
+    // Handle pause: update all pending queue items to 'paused'
+    if (data.pause) {
+      const db = (await import('@/lib/db')).getDb();
+      db.prepare("UPDATE queue SET status = 'paused' WHERE contact_id = ? AND user_id = ? AND status = 'pending'").run(contactId, userId);
       return NextResponse.json({ success: true });
     }
 
-    // Handle general field updates
-    contacts.update(contactId, userId, data);
+    // Handle resume: update all paused queue items back to 'pending'
+    if (data.resume) {
+      const db = (await import('@/lib/db')).getDb();
+      db.prepare("UPDATE queue SET status = 'pending' WHERE contact_id = ? AND user_id = ? AND status = 'paused'").run(contactId, userId);
+      return NextResponse.json({ success: true });
+    }
+
+    // Handle status update
+    if (data.status) {
+      contacts.updateStatus(contactId, data.status, userId);
+      // If opted_out, also cancel pending queue items
+      if (data.status === 'opted_out') {
+        queue.deleteByContact(contactId, userId);
+      }
+      return NextResponse.json({ success: true });
+    }
+
+    // Handle general field updates (edit contact)
+    const editableFields: Record<string, any> = {};
+    if (data.first_name !== undefined) editableFields.first_name = data.first_name;
+    if (data.last_name !== undefined) editableFields.last_name = data.last_name;
+    if (data.company !== undefined) editableFields.company = data.company;
+    if (data.title !== undefined) editableFields.title = data.title;
+    if (data.linkedin_url !== undefined) editableFields.linkedin_url = data.linkedin_url;
+    if (Object.keys(editableFields).length > 0) {
+      contacts.update(contactId, userId, editableFields);
+    }
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to update contact' }, { status: 500 });

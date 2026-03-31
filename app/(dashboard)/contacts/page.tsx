@@ -10,7 +10,7 @@ import {
   DialogTrigger
 } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Trash2, Upload, ExternalLink, Search, Users, FileSpreadsheet, Link2, CheckCircle2, AlertCircle, ArrowRight, Filter, GitBranch, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, Upload, ExternalLink, Search, Users, FileSpreadsheet, Link2, CheckCircle2, AlertCircle, ArrowRight, Filter, GitBranch, AlertTriangle, Edit2, Save, Pause, Play, Ban } from 'lucide-react';
 import { FUNNEL_STAGES, stageColors, STAGE_MAP } from '@/lib/constants';
 import { useUser } from '@/components/user-context';
 
@@ -58,6 +58,8 @@ export default function ContactsPage() {
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterSource, setFilterSource] = useState('all');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [editingContact, setEditingContact] = useState<number | null>(null);
+  const [editData, setEditData] = useState<Record<string, string>>({});
   const [bulkSequenceId, setBulkSequenceId] = useState('');
   const [newContact, setNewContact] = useState({ first_name: '', last_name: '', linkedin_url: '', company: '', title: '', sequence_id: '' });
   const [sequencesList, setSequencesList] = useState<Array<{ id: number; name: string }>>([]);
@@ -146,6 +148,51 @@ export default function ContactsPage() {
       body: JSON.stringify(payload),
     });
     setNewContact({ first_name: '', last_name: '', linkedin_url: '', company: '', title: '', sequence_id: '' });
+    fetchContacts();
+  };
+
+  const startEditContact = (c: Contact) => {
+    setEditingContact(c.id);
+    setEditData({ first_name: c.first_name || '', last_name: c.last_name || '', company: c.company || '', title: c.title || '', linkedin_url: c.linkedin_url || '' });
+  };
+
+  const saveEditContact = async () => {
+    if (!editingContact) return;
+    await fetch(`/api/contacts/${editingContact}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(editData),
+    });
+    setEditingContact(null);
+    setEditData({});
+    fetchContacts();
+  };
+
+  const markOptedOut = async (id: number) => {
+    await fetch(`/api/contacts/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'opted_out' }),
+    });
+    fetchContacts();
+  };
+
+  const pauseContact = async (id: number) => {
+    // Pause all pending queue items for this contact
+    await fetch(`/api/contacts/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pause: true }),
+    });
+    fetchContacts();
+  };
+
+  const resumeContact = async (id: number) => {
+    await fetch(`/api/contacts/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resume: true }),
+    });
     fetchContacts();
   };
 
@@ -512,46 +559,71 @@ export default function ContactsPage() {
           {filtered.map((contact) => {
             const cfg = getStatusDisplay(contact.status);
             const isSelected = selectedIds.has(contact.id);
+            const isEditing = editingContact === contact.id;
             return (
-              <div key={contact.id} className={`glass rounded-xl p-3.5 flex items-center gap-3 transition-all ${isSelected ? 'border-blue-500/30 bg-blue-500/5' : 'glass-hover'}`}>
-                <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(contact.id)} className="w-4 h-4 rounded border-border bg-background accent-blue-600 cursor-pointer shrink-0" />
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500/15 to-indigo-500/15 border border-blue-500/10 flex items-center justify-center text-xs font-semibold text-blue-300 shrink-0">
-                  {(contact.first_name || contact.name || '?').charAt(0)}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium text-white truncate">{displayName(contact)}</p>
-                    {contact.linkedin_url && (
-                      <a href={contact.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 shrink-0"><ExternalLink size={11} /></a>
-                    )}
+              <div key={contact.id} className={`glass rounded-xl p-3.5 transition-all ${isSelected ? 'border-blue-500/30 bg-blue-500/5' : 'glass-hover'}`}>
+                <div className="flex items-center gap-3">
+                  <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(contact.id)} className="w-4 h-4 rounded border-border bg-background accent-blue-600 cursor-pointer shrink-0" />
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500/15 to-indigo-500/15 border border-blue-500/10 flex items-center justify-center text-xs font-semibold text-blue-300 shrink-0">
+                    {(contact.first_name || contact.name || '?').charAt(0)}
                   </div>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {contact.title}{contact.title && contact.company ? ' at ' : ''}{contact.company}
-                  </p>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-white truncate">{displayName(contact)}</p>
+                      {contact.linkedin_url && (
+                        <a href={contact.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 shrink-0"><ExternalLink size={11} /></a>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {contact.title}{contact.title && contact.company ? ' at ' : ''}{contact.company}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-md ${cfg.bg}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+                      {cfg.label}
+                    </span>
+                    {sequencesList.length > 0 && !['queued', 'opted_out'].includes(contact.status) && (
+                      <select defaultValue="" onChange={(e) => { if (e.target.value) assignSequence(contact.id, parseInt(e.target.value)); }} className="h-7 bg-secondary/50 text-white text-[11px] rounded-lg px-1.5 border border-border focus:outline-none focus:border-blue-500/50 cursor-pointer">
+                        <option value="">+ Seq</option>
+                        {sequencesList.map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}
+                      </select>
+                    )}
+                    {contact.status === 'queued' && (
+                      <button onClick={() => pauseContact(contact.id)} className="p-1 rounded-md text-muted-foreground hover:text-amber-400 hover:bg-amber-500/10 transition-all" title="Pause">
+                        <Pause size={12} />
+                      </button>
+                    )}
+                    {contact.status === 'queued' && (
+                      <button onClick={() => markOptedOut(contact.id)} className="p-1 rounded-md text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-all" title="Mark opted out">
+                        <Ban size={12} />
+                      </button>
+                    )}
+                    <button onClick={() => isEditing ? setEditingContact(null) : startEditContact(contact)} className="p-1 rounded-md text-muted-foreground hover:text-white hover:bg-secondary transition-all" title="Edit">
+                      <Edit2 size={12} />
+                    </button>
+                    <button onClick={() => deleteContact(contact.id)} className="p-1 rounded-md text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-all" title="Delete">
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-md ${cfg.bg}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
-                    {cfg.label}
-                  </span>
-                  {sequencesList.length > 0 && !['queued', 'opted_out'].includes(contact.status) && (
-                    <select defaultValue="" onChange={(e) => { if (e.target.value) assignSequence(contact.id, parseInt(e.target.value)); }} className="h-7 bg-secondary/50 text-white text-[11px] rounded-lg px-1.5 border border-border focus:outline-none focus:border-blue-500/50 cursor-pointer">
-                      <option value="">+ Seq</option>
-                      {sequencesList.map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}
-                    </select>
-                  )}
-                  <Select value={contact.status} onValueChange={(v) => { if (v) updateStatus(contact.id, v); }}>
-                    <SelectTrigger className="w-32 h-7 bg-secondary/50 border-border text-[11px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {FUNNEL_STAGES.map(s => (<SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>))}
-                    </SelectContent>
-                  </Select>
-                  <button onClick={() => deleteContact(contact.id)} className="p-1 rounded-md text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-all">
-                    <Trash2 size={13} />
-                  </button>
-                </div>
+                {/* Inline edit */}
+                {isEditing && (
+                  <div className="mt-3 ml-14 grid grid-cols-5 gap-2 animate-slide-up">
+                    <input value={editData.first_name || ''} onChange={(e) => setEditData({ ...editData, first_name: e.target.value })} placeholder="First name" className="bg-background/50 border border-border rounded-lg px-2 h-8 text-xs text-white" />
+                    <input value={editData.last_name || ''} onChange={(e) => setEditData({ ...editData, last_name: e.target.value })} placeholder="Last name" className="bg-background/50 border border-border rounded-lg px-2 h-8 text-xs text-white" />
+                    <input value={editData.company || ''} onChange={(e) => setEditData({ ...editData, company: e.target.value })} placeholder="Company" className="bg-background/50 border border-border rounded-lg px-2 h-8 text-xs text-white" />
+                    <input value={editData.title || ''} onChange={(e) => setEditData({ ...editData, title: e.target.value })} placeholder="Title" className="bg-background/50 border border-border rounded-lg px-2 h-8 text-xs text-white" />
+                    <div className="flex gap-1">
+                      <button onClick={saveEditContact} className="flex-1 h-8 rounded-lg bg-blue-600 text-white text-xs hover:bg-blue-500 transition-all flex items-center justify-center">
+                        <Save size={12} />
+                      </button>
+                      <button onClick={() => setEditingContact(null)} className="h-8 px-2 rounded-lg text-xs text-muted-foreground hover:text-white hover:bg-secondary transition-all">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
