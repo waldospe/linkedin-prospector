@@ -81,22 +81,23 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4 relative overflow-hidden">
-      <div className="absolute top-0 left-1/4 w-96 h-96 bg-blue-500/5 rounded-full blur-3xl" />
-      <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl" />
+    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden"
+      style={{ background: 'radial-gradient(ellipse at 50% 0%, hsl(220 40% 8%) 0%, hsl(230 15% 5.5%) 60%)' }}>
+      <div className="absolute top-[-20%] left-[30%] w-[500px] h-[500px] bg-blue-500/[0.04] rounded-full blur-[100px]" />
+      <div className="absolute bottom-[-10%] right-[20%] w-[400px] h-[400px] bg-violet-500/[0.03] rounded-full blur-[80px]" />
 
-      <div className="w-full max-w-sm animate-fade-in relative">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 mb-4">
-            <Zap className="w-6 h-6 text-blue-400" />
+      <div className="w-full max-w-[380px] animate-fade-in relative">
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl gradient-blue shadow-lg shadow-blue-500/20 mb-5">
+            <Zap className="w-7 h-7 text-white" />
           </div>
-          <h1 className="text-2xl font-semibold text-white tracking-tight">LinkedIn Prospector</h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <h1 className="text-[26px] font-bold text-white tracking-tight">LinkedIn Prospector</h1>
+          <p className="text-[14px] text-[hsl(220,10%,50%)] mt-1.5 font-light">
             {mode === 'login' ? 'Sign in to manage your campaigns' : 'Create your account'}
           </p>
         </div>
 
-        <div className="glass rounded-2xl p-6 space-y-5">
+        <div className="glass rounded-2xl p-7 space-y-5">
           <div className="space-y-4">
             {mode === 'signup' && (
               <div>
@@ -208,7 +209,7 @@ export default function LoginPage() {
           <button
             onClick={mode === 'login' ? handleLogin : handleSignup}
             disabled={loading || !email || !password || (mode === 'signup' && !name)}
-            className="w-full h-11 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 glow-blue"
+            className="w-full h-12 rounded-xl btn-primary text-white text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {loading ? (
               <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />

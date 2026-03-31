@@ -74,17 +74,17 @@ export default function DashboardPage() {
   const maxFunnelCount = Math.max(...POSITIVE_STAGES.map(s => funnelMap[s] || 0), 1);
 
   const statCards = [
-    { label: 'Connections', value: stats.today.connections_sent, icon: Send, color: 'blue' },
-    { label: 'Messages', value: stats.today.messages_sent, icon: MessageCircle, color: 'indigo' },
-    { label: 'Replies', value: stats.today.replies_received, icon: Reply, color: 'emerald' },
-    { label: 'Total Contacts', value: totalContacts, icon: Users, color: 'violet' },
+    { label: 'Connections', value: stats.today.connections_sent, icon: Send, color: 'blue', gradient: 'gradient-card-blue' },
+    { label: 'Messages', value: stats.today.messages_sent, icon: MessageCircle, color: 'indigo', gradient: 'gradient-card-indigo' },
+    { label: 'Replies', value: stats.today.replies_received, icon: Reply, color: 'emerald', gradient: 'gradient-card-emerald' },
+    { label: 'Total Contacts', value: totalContacts, icon: Users, color: 'violet', gradient: 'gradient-card-violet' },
   ];
 
   const iconColors: Record<string, string> = {
-    blue: 'text-blue-400 bg-blue-500/10 border-blue-500/15',
-    indigo: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/15',
-    emerald: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/15',
-    violet: 'text-violet-400 bg-violet-500/10 border-violet-500/15',
+    blue: 'text-blue-400 bg-blue-500/10 border-blue-500/20',
+    indigo: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/20',
+    emerald: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
+    violet: 'text-violet-400 bg-violet-500/10 border-violet-500/20',
   };
 
   return (
@@ -92,10 +92,10 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-white tracking-tight">
+          <h1 className="text-[28px] font-bold text-white tracking-tight leading-tight">
             {isViewingAll ? 'Team Overview' : `Welcome back${viewingUser ? `, ${viewingUser.name}` : ''}`}
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-[15px] text-muted-foreground mt-1.5 font-light">
             {isViewingAll ? 'Aggregated outreach activity across your team' : "Here's your outreach activity for today"}
           </p>
         </div>
@@ -121,33 +121,46 @@ export default function DashboardPage() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-4 gap-4">
-        {statCards.map(({ label, value, icon: Icon, color }) => (
-          <div key={label} className="glass rounded-xl p-5 animate-slide-up">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</span>
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center border ${iconColors[color]}`}>
-                <Icon size={15} />
+      <div className="grid grid-cols-4 gap-5">
+        {statCards.map(({ label, value, icon: Icon, color, gradient }, idx) => (
+          <div key={label} className={`glass ${gradient} rounded-2xl p-5 animate-slide-up`} style={{ animationDelay: `${idx * 60}ms` }}>
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">{label}</span>
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center border ${iconColors[color]}`}>
+                <Icon size={16} />
               </div>
             </div>
-            <p className="text-3xl font-semibold text-white tabular-nums">{value}</p>
+            <p className="text-[32px] font-bold text-white tabular-nums leading-none animate-count-up">{value}</p>
           </div>
         ))}
       </div>
 
       {/* Daily progress */}
-      <div className="glass rounded-xl p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <TrendingUp size={16} className="text-muted-foreground" />
-            <span className="text-sm font-medium text-white">Daily Activity</span>
+      <div className="glass rounded-2xl p-6">
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-2.5">
+            <TrendingUp size={16} className="text-blue-400" />
+            <span className="text-sm font-semibold text-white">Daily Activity</span>
           </div>
-          <span className="text-sm tabular-nums text-muted-foreground">{dailyUsed} / {dailyLimit}</span>
+          <div className="flex items-baseline gap-1">
+            <span className="text-lg font-bold text-white tabular-nums">{dailyUsed}</span>
+            <span className="text-sm text-muted-foreground">/ {dailyLimit}</span>
+          </div>
         </div>
-        <div className="h-2 bg-secondary rounded-full overflow-hidden">
-          <div className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full transition-all duration-500" style={{ width: `${dailyProgress}%` }} />
+        <div className="h-2.5 bg-[hsl(230,12%,12%)] rounded-full overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all duration-700 ease-out"
+            style={{
+              width: `${dailyProgress}%`,
+              background: dailyProgress >= 100
+                ? 'linear-gradient(90deg, hsl(0 72% 51%), hsl(15 80% 50%))'
+                : 'linear-gradient(90deg, hsl(220 90% 56%), hsl(260 80% 55%))',
+            }}
+          />
         </div>
-        <p className="text-xs text-muted-foreground mt-2">{dailyProgress >= 100 ? 'Daily limit reached' : `${Math.round(100 - dailyProgress)}% remaining`}</p>
+        <p className="text-xs text-muted-foreground mt-3 font-medium">
+          {dailyProgress >= 100 ? '🎯 Daily limit reached' : `${Math.round(100 - dailyProgress)}% remaining`}
+        </p>
       </div>
 
       {/* Funnel + Queue */}
