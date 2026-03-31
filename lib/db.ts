@@ -447,13 +447,23 @@ export const contacts = {
     return getDb().prepare('SELECT * FROM contacts WHERE user_id = ? ORDER BY created_at DESC').all(userId);
   },
   getPaginated: (userId: number, opts: { limit: number; offset: number; status?: string; search?: string }) => {
-    let where = 'WHERE user_id = ?';
+    let where = 'WHERE c.user_id = ?';
     const params: any[] = [userId];
-    if (opts.status && opts.status !== 'all') { where += ' AND status = ?'; params.push(opts.status); }
-    if (opts.search) { where += ' AND (name LIKE ? OR first_name LIKE ? OR last_name LIKE ? OR company LIKE ? OR title LIKE ?)'; const s = `%${opts.search}%`; params.push(s, s, s, s, s); }
-    const total = getDb().prepare(`SELECT COUNT(*) as count FROM contacts ${where}`).get(...params) as any;
+    if (opts.status && opts.status !== 'all') { where += ' AND c.status = ?'; params.push(opts.status); }
+    if (opts.search) { where += ' AND (c.name LIKE ? OR c.first_name LIKE ? OR c.last_name LIKE ? OR c.company LIKE ? OR c.title LIKE ?)'; const s = `%${opts.search}%`; params.push(s, s, s, s, s); }
+    const total = getDb().prepare(`SELECT COUNT(*) as count FROM contacts c ${where}`).get(...params) as any;
     params.push(opts.limit, opts.offset);
-    const rows = getDb().prepare(`SELECT * FROM contacts ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`).all(...params);
+    const rows = getDb().prepare(`
+      SELECT c.*, sq.sequence_name, sq.sequence_id as active_sequence_id FROM contacts c
+      LEFT JOIN (
+        SELECT q.contact_id, s.name as sequence_name, q.sequence_id,
+          ROW_NUMBER() OVER (PARTITION BY q.contact_id ORDER BY q.id DESC) as rn
+        FROM queue q
+        JOIN sequences s ON q.sequence_id = s.id
+        WHERE q.user_id = ?
+      ) sq ON sq.contact_id = c.id AND sq.rn = 1
+      ${where} ORDER BY c.created_at DESC LIMIT ? OFFSET ?
+    `).all(userId, ...params);
     return { rows, total: total.count };
   },
   getAllTeam: (teamId?: number) => {

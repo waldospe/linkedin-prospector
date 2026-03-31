@@ -26,6 +26,8 @@ interface Contact {
   source: string;
   status: string;
   avatar_url?: string;
+  sequence_name?: string;
+  active_sequence_id?: number;
 }
 
 const getStatusDisplay = (status: string) => {
@@ -595,12 +597,16 @@ export default function ContactsPage() {
                       <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
                       {cfg.label}
                     </span>
-                    {sequencesList.length > 0 && !['queued', 'opted_out'].includes(contact.status) && (
+                    {contact.sequence_name ? (
+                      <span className="inline-flex items-center text-[10px] font-medium px-2 py-0.5 rounded-md bg-violet-500/10 text-violet-400 border border-violet-500/15 max-w-[120px] truncate" title={contact.sequence_name}>
+                        {contact.sequence_name}
+                      </span>
+                    ) : sequencesList.length > 0 && !['opted_out'].includes(contact.status) ? (
                       <select defaultValue="" onChange={(e) => { if (e.target.value) assignSequence(contact.id, parseInt(e.target.value)); }} className="h-7 bg-secondary/50 text-white text-[11px] rounded-lg px-1.5 border border-border focus:outline-none focus:border-blue-500/50 cursor-pointer">
                         <option value="">+ Seq</option>
                         {sequencesList.map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}
                       </select>
-                    )}
+                    ) : null}
                     {contact.status === 'queued' && (
                       <button onClick={() => pauseContact(contact.id)} className="p-1 rounded-md text-muted-foreground hover:text-amber-400 hover:bg-amber-500/10 transition-all" title="Pause">
                         <Pause size={12} />
