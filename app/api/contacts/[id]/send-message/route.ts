@@ -1,16 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserFromRequest } from '@/lib/api-auth';
+import { getEffectiveUser } from '@/lib/api-auth';
 import { contacts, users, globalConfig, messages, queue, activityLog } from '@/lib/db';
 import { getDb } from '@/lib/db';
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const { userId } = getUserFromRequest(req);
+    const { effectiveUserId, userId: authUserId } = getEffectiveUser(req);
+    const viewUserId = effectiveUserId || authUserId;
     const contactId = Number(params.id);
-    const contact = contacts.getById(contactId, userId) as any;
+    const contact = contacts.getById(contactId, viewUserId) as any;
     if (!contact) return NextResponse.json({ error: 'Contact not found' }, { status: 404 });
 
-    const user = users.getById(userId) as any;
+    // Use the contact owner's Unipile account for API calls
+    const contactOwner = users.getById(contact.user_id || viewUserId) as any;
+    const user = contactOwner;
     const cfg = globalConfig.get();
     const { message } = await req.json();
 
@@ -56,22 +59,23 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: `Failed to send: ${errText.slice(0, 200)}` }, { status: 400 });
     }
 
-    // Log the message
-    messages.create(userId, { contact_id: contactId, content: message.trim() });
+    // Log the message under the contact owner's account
+    const ownerId = contact.user_id || viewUserId;
+    messages.create(ownerId, { contact_id: contactId, content: message.trim() });
 
     // Cancel any pending sequence items for this contact (manual message overrides sequence)
     const db = getDb();
     const cancelled = db.prepare(
       "UPDATE queue SET status = 'completed', error = 'Cancelled: manual message sent' WHERE contact_id = ? AND user_id = ? AND status = 'pending'"
-    ).run(contactId, userId);
+    ).run(contactId, ownerId);
 
     // Update contact status to msg_sent if not already further along
     if (['new', 'queued', 'invite_sent', 'invite_pending', 'connected'].includes(contact.status)) {
-      contacts.updateStatus(contactId, 'msg_sent', userId);
+      contacts.updateStatus(contactId, 'msg_sent', ownerId);
     }
 
     // Log activity
-    activityLog.log(userId, 'manual_message', 'contact', contactId, `Sent manual message to ${contact.name}`);
+    activityLog.log(ownerId, 'manual_message', 'contact', contactId, `Sent manual message to ${contact.name}`);
 
     return NextResponse.json({
       success: true,

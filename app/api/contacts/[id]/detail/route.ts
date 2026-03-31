@@ -1,32 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserFromRequest } from '@/lib/api-auth';
+import { getEffectiveUser } from '@/lib/api-auth';
 import { contacts, users, globalConfig, messages, queue } from '@/lib/db';
 import { getDb } from '@/lib/db';
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const { userId } = getUserFromRequest(req);
+    const { effectiveUserId, userId: authUserId } = getEffectiveUser(req);
+    const viewUserId = effectiveUserId || authUserId;
     const contactId = Number(params.id);
-    const contact = contacts.getById(contactId, userId) as any;
+    const contact = contacts.getById(contactId, viewUserId) as any;
     if (!contact) return NextResponse.json({ error: 'Contact not found' }, { status: 404 });
 
-    const user = users.getById(userId) as any;
+    // Use the contact owner's Unipile account for API calls
+    const contactOwner = users.getById(contact.user_id || viewUserId) as any;
+    const user = contactOwner;
     const cfg = globalConfig.get();
 
     // Get our stored messages
     const db = getDb();
+    const ownerId = contact.user_id || viewUserId;
     const storedMessages = db.prepare(`
       SELECT id, content, sent_at, replied_at FROM messages
       WHERE contact_id = ? AND user_id = ?
       ORDER BY sent_at ASC
-    `).all(contactId, userId);
+    `).all(contactId, ownerId);
 
     // Get queue history
     const queueHistory = db.prepare(`
       SELECT id, action_type, status, message_text, template_variant, executed_at, error
       FROM queue WHERE contact_id = ? AND user_id = ?
       ORDER BY id ASC
-    `).all(contactId, userId);
+    `).all(contactId, ownerId);
 
     // Try to fetch LinkedIn profile and conversation from Unipile
     let linkedinProfile: any = null;

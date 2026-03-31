@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, ExternalLink, Send, MapPin, Users, Linkedin, Clock, CheckCircle2, AlertCircle, MessageCircle, GitBranch, Loader2 } from 'lucide-react';
 import { STAGE_MAP, stageColors } from '@/lib/constants';
+import { useUser } from '@/components/user-context';
 
 interface ContactDetailProps {
   contactId: number;
@@ -16,6 +17,7 @@ export default function ContactDetail({ contactId, onClose }: ContactDetailProps
   const [sending, setSending] = useState(false);
   const [sendResult, setSendResult] = useState<string>('');
   const messageEndRef = useRef<HTMLDivElement>(null);
+  const { apiQuery } = useUser();
 
   useEffect(() => {
     fetchDetail();
@@ -28,7 +30,7 @@ export default function ContactDetail({ contactId, onClose }: ContactDetailProps
   const fetchDetail = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/contacts/${contactId}/detail`);
+      const res = await fetch(`/api/contacts/${contactId}/detail${apiQuery}`);
       if (res.ok) setData(await res.json());
     } finally { setLoading(false); }
   };
@@ -38,7 +40,7 @@ export default function ContactDetail({ contactId, onClose }: ContactDetailProps
     setSending(true);
     setSendResult('');
     try {
-      const res = await fetch(`/api/contacts/${contactId}/send-message`, {
+      const res = await fetch(`/api/contacts/${contactId}/send-message${apiQuery}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: message.trim() }),
