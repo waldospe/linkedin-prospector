@@ -13,6 +13,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [teams, setTeams] = useState<Array<{ id: number; name: string }>>([]);
   const [selectedTeam, setSelectedTeam] = useState('');
+  const [newTeamName, setNewTeamName] = useState('');
 
   useEffect(() => {
     if (mode === 'signup') {
@@ -48,13 +49,21 @@ export default function LoginPage() {
   async function handleSignup() {
     if (!name || !email || !password) return;
     if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
+    if (selectedTeam === '__new__' && !newTeamName.trim()) { setError('Enter a team name'); return; }
     setLoading(true);
     setError('');
     try {
+      const payload: any = { name, email, password };
+      if (selectedTeam === '__new__' && newTeamName.trim()) {
+        payload.new_team_name = newTeamName.trim();
+      } else if (selectedTeam && selectedTeam !== '__new__') {
+        payload.team_id = parseInt(selectedTeam);
+      }
+
       const res = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password, team_id: selectedTeam ? parseInt(selectedTeam) : undefined }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (res.ok) {
@@ -130,7 +139,7 @@ export default function LoginPage() {
                 </button>
               </div>
             </div>
-            {mode === 'signup' && teams.length > 0 && (
+            {mode === 'signup' && (
               <div>
                 <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5 block">Team</label>
                 <select
@@ -138,9 +147,19 @@ export default function LoginPage() {
                   onChange={(e) => setSelectedTeam(e.target.value)}
                   className="w-full h-11 rounded-lg border border-border bg-background/50 text-white px-3 text-sm focus:outline-none focus:border-blue-500/50 transition-all"
                 >
-                  <option value="">Select a team (optional)</option>
+                  <option value="">Select a team</option>
                   {teams.map(t => (<option key={t.id} value={t.id}>{t.name}</option>))}
+                  <option value="__new__">+ Create a new team</option>
                 </select>
+                {selectedTeam === '__new__' && (
+                  <input
+                    type="text"
+                    placeholder="Enter your team name"
+                    value={newTeamName}
+                    onChange={(e) => setNewTeamName(e.target.value)}
+                    className="w-full h-11 rounded-lg border border-border bg-background/50 text-white px-3.5 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-blue-500/50 transition-all mt-2"
+                  />
+                )}
               </div>
             )}
           </div>

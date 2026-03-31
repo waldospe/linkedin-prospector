@@ -4,7 +4,7 @@ import { users, teams } from '@/lib/db';
 
 export async function POST(req: NextRequest) {
   try {
-    const { name, email, password, team_id } = await req.json();
+    const { name, email, password, team_id, new_team_name } = await req.json();
 
     if (!name || !email || !password) {
       return NextResponse.json({ error: 'Name, email, and password required' }, { status: 400 });
@@ -18,9 +18,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Email already in use' }, { status: 409 });
     }
 
+    // Create new team if requested
+    let resolvedTeamId = team_id;
+    if (new_team_name && !team_id) {
+      try {
+        const result = teams.create(new_team_name.trim());
+        resolvedTeamId = result.lastInsertRowid as number;
+      } catch {
+        return NextResponse.json({ error: 'Team name already taken' }, { status: 409 });
+      }
+    }
+
     // Validate team exists if provided
-    if (team_id) {
-      const team = teams.getById(team_id);
+    if (resolvedTeamId) {
+      const team = teams.getById(resolvedTeamId);
       if (!team) {
         return NextResponse.json({ error: 'Team not found' }, { status: 404 });
       }
@@ -31,7 +42,7 @@ export async function POST(req: NextRequest) {
       email,
       password,
       role: 'user',
-      team_id: team_id || undefined,
+      team_id: resolvedTeamId || undefined,
     });
 
     const user = users.verifyPassword(email, password);
