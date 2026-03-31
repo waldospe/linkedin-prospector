@@ -414,6 +414,16 @@ export const contacts = {
   getAll: (userId: number) => {
     return getDb().prepare('SELECT * FROM contacts WHERE user_id = ? ORDER BY created_at DESC').all(userId);
   },
+  getPaginated: (userId: number, opts: { limit: number; offset: number; status?: string; search?: string }) => {
+    let where = 'WHERE user_id = ?';
+    const params: any[] = [userId];
+    if (opts.status && opts.status !== 'all') { where += ' AND status = ?'; params.push(opts.status); }
+    if (opts.search) { where += ' AND (name LIKE ? OR first_name LIKE ? OR last_name LIKE ? OR company LIKE ? OR title LIKE ?)'; const s = `%${opts.search}%`; params.push(s, s, s, s, s); }
+    const total = getDb().prepare(`SELECT COUNT(*) as count FROM contacts ${where}`).get(...params) as any;
+    params.push(opts.limit, opts.offset);
+    const rows = getDb().prepare(`SELECT * FROM contacts ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`).all(...params);
+    return { rows, total: total.count };
+  },
   getAllTeam: (teamId?: number) => {
     return getDb().prepare(`
       SELECT c.*, u.name as user_name FROM contacts c

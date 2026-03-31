@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { Input } from '@/components/ui/input';
 import {
   Dialog,
@@ -49,7 +49,11 @@ interface ImportState {
 
 export default function ContactsPage() {
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [totalContacts, setTotalContacts] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(50);
   const [loading, setLoading] = useState(true);
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterSource, setFilterSource] = useState('all');
@@ -69,17 +73,32 @@ export default function ContactsPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const { apiQuery, viewAs, isViewingAll } = useUser();
 
+  // Debounce search
+  useEffect(() => {
+    const timer = setTimeout(() => { setSearch(searchInput); setPage(1); }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
   useEffect(() => {
     fetchContacts();
     fetch('/api/sequences').then(r => r.json()).then(data => {
       if (Array.isArray(data)) setSequencesList(data.filter((s: any) => s.active));
     });
-  }, [viewAs]);
+  }, [viewAs, page, filterStatus, search]);
 
   const fetchContacts = async () => {
     try {
-      const res = await fetch(`/api/contacts${apiQuery}`);
-      setContacts(await res.json());
+      const sep = apiQuery.includes('?') ? '&' : '?';
+      const params = `page=${page}&limit=${pageSize}${filterStatus !== 'all' ? `&status=${filterStatus}` : ''}${search ? `&search=${encodeURIComponent(search)}` : ''}`;
+      const res = await fetch(`/api/contacts${apiQuery}${sep}${params}`);
+      const data = await res.json();
+      if (data.rows) {
+        setContacts(data.rows);
+        setTotalContacts(data.total);
+      } else if (Array.isArray(data)) {
+        setContacts(data);
+        setTotalContacts(data.length);
+      }
     } finally { setLoading(false); }
   };
 
@@ -322,19 +341,8 @@ export default function ContactsPage() {
   // Filtering
   const sources = useMemo(() => Array.from(new Set(contacts.map(c => c.source).filter(Boolean))), [contacts]);
 
-  const filtered = useMemo(() => {
-    return contacts.filter(c => {
-      if (filterStatus !== 'all' && c.status !== filterStatus) return false;
-      if (filterSource !== 'all' && c.source !== filterSource) return false;
-      if (search) {
-        const q = search.toLowerCase();
-        if (!(c.name?.toLowerCase().includes(q) || c.first_name?.toLowerCase().includes(q) ||
-              c.last_name?.toLowerCase().includes(q) || c.company?.toLowerCase().includes(q) ||
-              c.title?.toLowerCase().includes(q))) return false;
-      }
-      return true;
-    });
-  }, [contacts, filterStatus, filterSource, search]);
+  // Server-side pagination handles filtering — contacts is already the current page
+  const filtered = contacts;
 
   const displayName = (c: Contact) => {
     if (c.first_name || c.last_name) return [c.first_name, c.last_name].filter(Boolean).join(' ');
@@ -371,9 +379,15 @@ export default function ContactsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-white tracking-tight">Contacts</h1>
-          <p className="text-sm text-muted-foreground mt-1">{contacts.length} prospects in your pipeline</p>
+          <p className="text-sm text-muted-foreground mt-1">{totalContacts} prospects in your pipeline</p>
         </div>
         <div className="flex gap-2">
+          <a
+            href={`/api/contacts/export${apiQuery}`}
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-white hover:border-border/80 hover:bg-secondary/50 transition-all"
+          >
+            Export
+          </a>
           <button
             onClick={() => { resetImport(); setShowImport(true); }}
             className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-white hover:border-border/80 hover:bg-secondary/50 transition-all"
@@ -430,9 +444,9 @@ export default function ContactsPage() {
       <div className="flex items-center gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <input placeholder="Search contacts..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full h-9 rounded-lg border border-border bg-card/50 text-white pl-10 pr-4 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-blue-500/50 transition-all" />
+          <input placeholder="Search contacts..." value={searchInput} onChange={(e) => setSearchInput(e.target.value)} className="w-full h-9 rounded-lg border border-border bg-card/50 text-white pl-10 pr-4 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-blue-500/50 transition-all" />
         </div>
-        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="h-9 bg-card/50 text-white text-xs rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50">
+        <select value={filterStatus} onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }} className="h-9 bg-card/50 text-white text-xs rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50">
           <option value="all">All Stages</option>
           {FUNNEL_STAGES.map(s => (<option key={s.key} value={s.key}>{s.label}</option>))}
         </select>
@@ -447,7 +461,7 @@ export default function ContactsPage() {
             Clear
           </button>
         )}
-        <span className="text-xs text-muted-foreground">{filtered.length} shown</span>
+        <span className="text-xs text-muted-foreground">{totalContacts} total</span>
       </div>
 
       {/* Bulk actions bar */}
@@ -541,6 +555,24 @@ export default function ContactsPage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {totalContacts > pageSize && (
+        <div className="flex items-center justify-between py-4">
+          <span className="text-xs text-muted-foreground">
+            Showing {(page - 1) * pageSize + 1}-{Math.min(page * pageSize, totalContacts)} of {totalContacts}
+          </span>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-border text-muted-foreground hover:text-white hover:bg-secondary disabled:opacity-30 transition-all">
+              Previous
+            </button>
+            <span className="text-xs text-white tabular-nums">Page {page} of {Math.ceil(totalContacts / pageSize)}</span>
+            <button onClick={() => setPage(p => p + 1)} disabled={page >= Math.ceil(totalContacts / pageSize)} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-border text-muted-foreground hover:text-white hover:bg-secondary disabled:opacity-30 transition-all">
+              Next
+            </button>
+          </div>
         </div>
       )}
 

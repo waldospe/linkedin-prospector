@@ -6,10 +6,23 @@ import { substituteVariables } from '@/lib/constants';
 export async function GET(req: NextRequest) {
   try {
     const { effectiveUserId, isAll, userId } = getEffectiveUser(req);
+    const { searchParams } = new URL(req.url);
+    const page = parseInt(searchParams.get('page') || '1');
+    const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 100);
+    const status = searchParams.get('status') || undefined;
+    const search = searchParams.get('search') || undefined;
+
     if (isAll) {
       const user = users.getById(userId) as any;
       return NextResponse.json(contacts.getAllTeam(user?.team_id));
     }
+
+    // Use pagination if page param is present
+    if (searchParams.has('page')) {
+      const result = contacts.getPaginated(effectiveUserId!, { limit, offset: (page - 1) * limit, status, search });
+      return NextResponse.json({ rows: result.rows, total: result.total, page, limit });
+    }
+
     return NextResponse.json(contacts.getAll(effectiveUserId!));
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch contacts' }, { status: 500 });
