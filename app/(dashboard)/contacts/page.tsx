@@ -566,7 +566,7 @@ export default function ContactsPage() {
               <div key={contact.id} className={`glass rounded-xl p-3.5 transition-all ${isSelected ? 'border-blue-500/30 bg-blue-500/5' : 'glass-hover'}`}>
                 <div className="flex items-center gap-3">
                   <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(contact.id)} className="w-4 h-4 rounded border-border bg-background accent-blue-600 cursor-pointer shrink-0" />
-                  {contact.avatar_url ? (
+                  {contact.avatar_url && contact.avatar_url !== 'none' ? (
                     <img src={contact.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover shrink-0 border border-[hsl(230,10%,18%)]" />
                   ) : (
                     <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500/15 to-indigo-500/15 border border-blue-500/10 flex items-center justify-center text-xs font-semibold text-blue-300 shrink-0">
