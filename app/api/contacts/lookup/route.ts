@@ -94,6 +94,9 @@ export async function POST(req: NextRequest) {
     const headline = profile.headline || '';
     if (!title && headline) title = headline;
 
+    // Avatar
+    const avatarUrl = profile.profile_picture_url || profile.profile_picture_url_large || profile.avatar_url || '';
+
     return NextResponse.json({
       first_name: firstName,
       last_name: lastName,
@@ -102,6 +105,7 @@ export async function POST(req: NextRequest) {
       company,
       headline,
       linkedin_url: url,
+      avatar_url: avatarUrl,
     });
   } catch (error: any) {
     console.log('LOOKUP fatal error:', error.message);

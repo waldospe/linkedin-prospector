@@ -38,7 +38,7 @@ function initDb() {
       db.exec(`DROP TABLE IF EXISTS ${t}`);
     }
     db.exec('DELETE FROM schema_version');
-    db.exec('INSERT INTO schema_version (version) VALUES (8)');
+    db.exec('INSERT INTO schema_version (version) VALUES (9)');
   }
 
   if (currentVersion >= 2 && currentVersion < 4) {
@@ -100,6 +100,14 @@ function initDb() {
       db.exec(`ALTER TABLE queue ADD COLUMN template_variant TEXT`);
     }
     db.exec('UPDATE schema_version SET version = 8');
+  }
+
+  if (currentVersion === 8) {
+    const cCols = db.pragma('table_info(contacts)') as any[];
+    if (cCols && !cCols.find((c: any) => c.name === 'avatar_url')) {
+      db.exec(`ALTER TABLE contacts ADD COLUMN avatar_url TEXT`);
+    }
+    db.exec('UPDATE schema_version SET version = 9');
   }
 
   // Activity log
@@ -169,6 +177,7 @@ function initDb() {
       source TEXT DEFAULT 'manual',
       status TEXT DEFAULT 'new',
       pipedrive_id TEXT,
+      avatar_url TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
@@ -461,7 +470,7 @@ export const contacts = {
   getByStatus: (status: string, userId: number) => {
     return getDb().prepare('SELECT * FROM contacts WHERE status = ? AND user_id = ?').all(status, userId);
   },
-  create: (userId: number, data: { first_name?: string; last_name?: string; name?: string; linkedin_url?: string; company?: string; title?: string; source?: string; pipedrive_id?: string }) => {
+  create: (userId: number, data: { first_name?: string; last_name?: string; name?: string; linkedin_url?: string; company?: string; title?: string; source?: string; pipedrive_id?: string; avatar_url?: string }) => {
     const firstName = data.first_name || '';
     const lastName = data.last_name || '';
     // Auto-generate name from first/last if not provided, or split name into first/last
@@ -476,9 +485,9 @@ export const contacts = {
       fullName = [fn, ln].filter(Boolean).join(' ');
     }
     return getDb().prepare(`
-      INSERT INTO contacts (user_id, first_name, last_name, name, linkedin_url, company, title, source, pipedrive_id, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'new')
-    `).run(userId, fn, ln, fullName, data.linkedin_url || '', data.company || '', data.title || '', data.source || 'manual', data.pipedrive_id || null);
+      INSERT INTO contacts (user_id, first_name, last_name, name, linkedin_url, company, title, source, pipedrive_id, avatar_url, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'new')
+    `).run(userId, fn, ln, fullName, data.linkedin_url || '', data.company || '', data.title || '', data.source || 'manual', data.pipedrive_id || null, data.avatar_url || null);
   },
   bulkCreate: (userId: number, rows: Array<{ first_name?: string; last_name?: string; name?: string; linkedin_url?: string; company?: string; title?: string; source?: string }>) => {
     const insert = getDb().prepare(`

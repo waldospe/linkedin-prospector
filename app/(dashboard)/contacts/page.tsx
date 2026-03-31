@@ -24,6 +24,7 @@ interface Contact {
   title: string;
   source: string;
   status: string;
+  avatar_url?: string;
 }
 
 const getStatusDisplay = (status: string) => {
@@ -61,7 +62,7 @@ export default function ContactsPage() {
   const [editingContact, setEditingContact] = useState<number | null>(null);
   const [editData, setEditData] = useState<Record<string, string>>({});
   const [bulkSequenceId, setBulkSequenceId] = useState('');
-  const [newContact, setNewContact] = useState({ first_name: '', last_name: '', linkedin_url: '', company: '', title: '', sequence_id: '' });
+  const [newContact, setNewContact] = useState({ first_name: '', last_name: '', linkedin_url: '', company: '', title: '', sequence_id: '', avatar_url: '' });
   const [sequencesList, setSequencesList] = useState<Array<{ id: number; name: string }>>([]);
   const [importing, setImporting] = useState(false);
   const [showImport, setShowImport] = useState(false);
@@ -124,6 +125,7 @@ export default function ContactsPage() {
           company: data.company || prev.company,
           title: data.title || prev.title,
           linkedin_url: data.linkedin_url || url,
+          avatar_url: data.avatar_url || prev.avatar_url,
         }));
       } else if (!res.ok) {
         setLookupError(data.error || 'Lookup failed');
@@ -147,7 +149,7 @@ export default function ContactsPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    setNewContact({ first_name: '', last_name: '', linkedin_url: '', company: '', title: '', sequence_id: '' });
+    setNewContact({ first_name: '', last_name: '', linkedin_url: '', company: '', title: '', sequence_id: '', avatar_url: '' });
     fetchContacts();
   };
 
@@ -564,9 +566,13 @@ export default function ContactsPage() {
               <div key={contact.id} className={`glass rounded-xl p-3.5 transition-all ${isSelected ? 'border-blue-500/30 bg-blue-500/5' : 'glass-hover'}`}>
                 <div className="flex items-center gap-3">
                   <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(contact.id)} className="w-4 h-4 rounded border-border bg-background accent-blue-600 cursor-pointer shrink-0" />
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500/15 to-indigo-500/15 border border-blue-500/10 flex items-center justify-center text-xs font-semibold text-blue-300 shrink-0">
-                    {(contact.first_name || contact.name || '?').charAt(0)}
-                  </div>
+                  {contact.avatar_url ? (
+                    <img src={contact.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover shrink-0 border border-[hsl(230,10%,18%)]" />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500/15 to-indigo-500/15 border border-blue-500/10 flex items-center justify-center text-xs font-semibold text-blue-300 shrink-0">
+                      {(contact.first_name || contact.name || '?').charAt(0)}
+                    </div>
+                  )}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-medium text-white truncate">{displayName(contact)}</p>
