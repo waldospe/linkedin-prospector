@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Plus, Trash2, Upload, ExternalLink, Search, Users, FileSpreadsheet, Link2, CheckCircle2, AlertCircle, ArrowRight, Filter, GitBranch, AlertTriangle, Edit2, Save, Pause, Play, Ban } from 'lucide-react';
 import { FUNNEL_STAGES, stageColors, STAGE_MAP } from '@/lib/constants';
 import { useUser } from '@/components/user-context';
+import ContactDetail from '@/components/contact-detail';
 
 interface Contact {
   id: number;
@@ -61,6 +62,7 @@ export default function ContactsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [editingContact, setEditingContact] = useState<number | null>(null);
   const [editData, setEditData] = useState<Record<string, string>>({});
+  const [detailContactId, setDetailContactId] = useState<number | null>(null);
   const [bulkSequenceId, setBulkSequenceId] = useState('');
   const [newContact, setNewContact] = useState({ first_name: '', last_name: '', linkedin_url: '', company: '', title: '', sequence_id: '', avatar_url: '' });
   const [sequencesList, setSequencesList] = useState<Array<{ id: number; name: string }>>([]);
@@ -566,16 +568,20 @@ export default function ContactsPage() {
               <div key={contact.id} className={`glass rounded-xl p-3.5 transition-all ${isSelected ? 'border-blue-500/30 bg-blue-500/5' : 'glass-hover'}`}>
                 <div className="flex items-center gap-3">
                   <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(contact.id)} className="w-4 h-4 rounded border-border bg-background accent-blue-600 cursor-pointer shrink-0" />
-                  {contact.avatar_url && contact.avatar_url !== 'none' ? (
-                    <img src={contact.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover shrink-0 border border-[hsl(230,10%,18%)]" />
-                  ) : (
-                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500/15 to-indigo-500/15 border border-blue-500/10 flex items-center justify-center text-xs font-semibold text-blue-300 shrink-0">
-                      {(contact.first_name || contact.name || '?').charAt(0)}
-                    </div>
-                  )}
+                  <button onClick={() => setDetailContactId(contact.id)} className="shrink-0 hover:opacity-80 transition-opacity">
+                    {contact.avatar_url && contact.avatar_url !== 'none' ? (
+                      <img src={contact.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover border border-[hsl(230,10%,18%)]" />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500/15 to-indigo-500/15 border border-blue-500/10 flex items-center justify-center text-xs font-semibold text-blue-300">
+                        {(contact.first_name || contact.name || '?').charAt(0)}
+                      </div>
+                    )}
+                  </button>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-white truncate">{displayName(contact)}</p>
+                      <button onClick={() => setDetailContactId(contact.id)} className="text-sm font-medium text-white truncate hover:text-blue-400 transition-colors text-left">
+                        {displayName(contact)}
+                      </button>
                       {contact.linkedin_url && (
                         <a href={contact.linkedin_url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 shrink-0"><ExternalLink size={11} /></a>
                       )}
@@ -824,6 +830,11 @@ export default function ContactsPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Contact Detail Panel */}
+      {detailContactId && (
+        <ContactDetail contactId={detailContactId} onClose={() => { setDetailContactId(null); fetchContacts(); }} />
+      )}
     </div>
   );
 }
