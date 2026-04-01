@@ -15,12 +15,14 @@ import {
   UserCog,
   Eye,
   Server,
+  Search,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/components/user-context';
 
 const navItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/search', label: 'Search', icon: Search },
   { href: '/contacts', label: 'Contacts', icon: Users },
   { href: '/sequences', label: 'Sequences', icon: GitBranch },
   { href: '/queue', label: 'Queue', icon: ListTodo },
