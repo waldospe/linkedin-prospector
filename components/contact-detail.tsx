@@ -209,7 +209,8 @@ export default function ContactDetail({ contactId, onClose }: ContactDetailProps
                 <MessageCircle className="w-10 h-10 text-muted-foreground/20 mb-3" />
                 <p className="text-sm text-muted-foreground">No conversation yet</p>
                 <p className="text-xs text-muted-foreground/60 mt-1">
-                  {profile?.is_relationship ? 'Send a message below to start a conversation' : 'Connect first to start messaging'}
+                  {profile?.is_relationship || ['connected', 'msg_sent', 'replied'].includes(contact?.status)
+                    ? 'Send a message below to start a conversation' : 'Connect first to start messaging'}
                 </p>
               </div>
             ) : (
@@ -233,13 +234,14 @@ export default function ContactDetail({ contactId, onClose }: ContactDetailProps
                     </div>
                   ))
                 ) : (
-                  /* Fall back to stored messages */
-                  (data?.storedMessages || []).map((msg: any) => (
-                    <div key={msg.id} className="flex justify-end">
+                  /* Fall back to stored messages (manual + sequence-sent) */
+                  (data?.storedMessages || []).map((msg: any, idx: number) => (
+                    <div key={msg.id || idx} className="flex justify-end">
                       <div className="max-w-[80%] px-4 py-2.5 rounded-2xl rounded-br-md bg-blue-600/20 text-blue-100 text-sm leading-relaxed">
                         <p className="whitespace-pre-wrap">{msg.content}</p>
                         <p className="text-[10px] text-blue-400/50 mt-1.5">
                           {new Date(msg.sent_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                          {msg.source === 'sequence' && <span className="ml-2 text-violet-400/70">● Sequence</span>}
                           {msg.replied_at && <span className="ml-2 text-emerald-400/70">● Replied</span>}
                         </p>
                       </div>
@@ -265,20 +267,20 @@ export default function ContactDetail({ contactId, onClose }: ContactDetailProps
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-                placeholder={profile?.is_relationship ? 'Type a message... (Enter to send, Shift+Enter for newline)' : 'Connect with this person first to send messages'}
-                disabled={!profile?.is_relationship}
+                placeholder={profile?.is_relationship || ['connected', 'msg_sent', 'replied', 'positive', 'meeting_booked'].includes(contact?.status) ? 'Type a message... (Enter to send, Shift+Enter for newline)' : 'Connect with this person first to send messages'}
+                disabled={!profile?.is_relationship && !['connected', 'msg_sent', 'replied', 'positive', 'meeting_booked'].includes(contact?.status)}
                 rows={2}
                 className="flex-1 bg-[hsl(230,12%,10%)] border border-[hsl(230,10%,15%)] rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-muted-foreground/40 focus:outline-none focus:border-blue-500/40 focus:ring-1 focus:ring-blue-500/20 resize-none disabled:opacity-40 disabled:cursor-not-allowed transition-all"
               />
               <button
                 onClick={sendMessage}
-                disabled={sending || !message.trim() || !profile?.is_relationship}
+                disabled={sending || !message.trim() || (!profile?.is_relationship && !['connected', 'msg_sent', 'replied', 'positive', 'meeting_booked'].includes(contact?.status))}
                 className="px-4 rounded-xl btn-primary text-white disabled:opacity-30 disabled:cursor-not-allowed shrink-0 flex items-center gap-2"
               >
                 {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
               </button>
             </div>
-            {profile?.is_relationship && (
+            {(profile?.is_relationship || ['connected', 'msg_sent', 'replied', 'positive', 'meeting_booked'].includes(contact?.status)) && (
               <p className="text-[10px] text-muted-foreground/50 mt-2">
                 Sending a manual message will cancel any active sequence for this contact
               </p>

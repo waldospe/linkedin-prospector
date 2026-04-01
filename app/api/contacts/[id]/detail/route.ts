@@ -16,14 +16,31 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const user = contactOwner;
     const cfg = globalConfig.get();
 
-    // Get our stored messages
+    // Get our stored messages (manual + sequence-sent)
     const db = getDb();
     const ownerId = contact.user_id || viewUserId;
-    const storedMessages = db.prepare(`
-      SELECT id, content, sent_at, replied_at FROM messages
+    const manualMessages = db.prepare(`
+      SELECT id, content, sent_at, replied_at, 'manual' as source FROM messages
       WHERE contact_id = ? AND user_id = ?
       ORDER BY sent_at ASC
-    `).all(contactId, ownerId);
+    `).all(contactId, ownerId) as any[];
+    const sequenceMessages = db.prepare(`
+      SELECT id, message_text as content, executed_at as sent_at, 'sequence' as source FROM queue
+      WHERE contact_id = ? AND user_id = ? AND action_type = 'message' AND status = 'completed' AND message_text IS NOT NULL AND message_text != ''
+      ORDER BY executed_at ASC
+    `).all(contactId, ownerId) as any[];
+    // Merge and deduplicate by content+timestamp proximity
+    const allSent = [...manualMessages, ...sequenceMessages].sort((a, b) =>
+      new Date(a.sent_at).getTime() - new Date(b.sent_at).getTime()
+    );
+    // Deduplicate: if manual and sequence message have same content within 60s, keep manual
+    const storedMessages = allSent.filter((msg, i) => {
+      if (msg.source === 'sequence') {
+        return !allSent.some(m => m.source === 'manual' && m.content === msg.content &&
+          Math.abs(new Date(m.sent_at).getTime() - new Date(msg.sent_at).getTime()) < 60000);
+      }
+      return true;
+    });
 
     // Get queue history
     const queueHistory = db.prepare(`
@@ -51,13 +68,14 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
           );
           if (profileRes.ok) {
             const p = await profileRes.json();
+            const localConnected = ['connected', 'msg_sent', 'replied', 'positive', 'meeting_booked'].includes(contact.status);
             linkedinProfile = {
               first_name: p.first_name,
               last_name: p.last_name,
               headline: p.headline,
               location: p.location,
               profile_picture_url: p.profile_picture_url || p.profile_picture_url_large,
-              is_relationship: p.is_relationship,
+              is_relationship: p.is_relationship || localConnected,
               network_distance: p.network_distance,
               connections_count: p.connections_count,
               follower_count: p.follower_count,
@@ -65,8 +83,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
               provider_id: p.provider_id,
             };
 
-            // Fetch conversation if connected
-            if (p.is_relationship || p.network_distance === 'FIRST_DEGREE') {
+            // Fetch conversation if connected (check Unipile flags OR local contact status)
+            const isConnected = p.is_relationship || p.network_distance === 'FIRST_DEGREE'
+              || ['connected', 'msg_sent', 'replied', 'positive', 'meeting_booked'].includes(contact.status);
+            if (isConnected) {
               try {
                 const providerId = p.provider_id || p.id;
                 const chatsRes = await fetch(
