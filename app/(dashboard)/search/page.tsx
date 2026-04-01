@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { Search, Plus, ExternalLink, MapPin, Users, Loader2, Link2, CheckCircle2, Linkedin, ArrowRight, Building2 } from 'lucide-react';
+import { useState, useCallback, useEffect } from 'react';
+import { Search, Plus, ExternalLink, MapPin, Users, Loader2, Link2, CheckCircle2, Linkedin, ArrowRight, Building2, GitBranch } from 'lucide-react';
 import { useUser } from '@/components/user-context';
 
 interface SearchResult {
@@ -31,8 +31,17 @@ export default function SearchPage() {
   const [paging, setPaging] = useState<any>(null);
   const [error, setError] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
-  const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
+  const [addedIds, setAddedIds] = useState<Map<string, string>>(new Map()); // id -> sequence name or ''
   const [addingId, setAddingId] = useState<string | null>(null);
+  const [sequences, setSequences] = useState<Array<{ id: number; name: string }>>([]);
+  const [selectedSequence, setSelectedSequence] = useState<string>('');
+
+  useEffect(() => {
+    fetch(`/api/sequences${apiQuery}`).then(r => r.json()).then(data => {
+      const list = (Array.isArray(data) ? data : []).filter((s: any) => s.enabled !== 0);
+      setSequences(list);
+    }).catch(() => {});
+  }, [apiQuery]);
 
   const runSearch = useCallback(async (nextCursor?: string) => {
     setSearching(true);
@@ -102,33 +111,36 @@ export default function SearchPage() {
     }
   }, [keywords, searchUrl, useUrl, apiQuery]);
 
-  const addToContacts = async (result: SearchResult) => {
+  const addToContacts = async (result: SearchResult, sequenceId?: number) => {
     const resultId = result.id || result.provider_id || '';
     setAddingId(resultId);
     try {
-      // Extract LinkedIn slug from URL for proper format
       let linkedinUrl = result.profile_url || '';
       if (linkedinUrl && !linkedinUrl.startsWith('http')) {
         linkedinUrl = `https://www.linkedin.com/in/${linkedinUrl}`;
       }
 
+      const body: any = {
+        first_name: result.first_name || '',
+        last_name: result.last_name || '',
+        name: result.name || '',
+        linkedin_url: linkedinUrl,
+        company: result.current_company || '',
+        title: result.current_title || result.headline || '',
+        source: 'linkedin_search',
+        avatar_url: result.profile_picture_url || '',
+      };
+      if (sequenceId) body.sequence_id = sequenceId;
+
       const res = await fetch(`/api/contacts${apiQuery}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          first_name: result.first_name || '',
-          last_name: result.last_name || '',
-          name: result.name || '',
-          linkedin_url: linkedinUrl,
-          company: result.current_company || '',
-          title: result.current_title || result.headline || '',
-          source: 'linkedin_search',
-          avatar_url: result.profile_picture_url || '',
-        }),
+        body: JSON.stringify(body),
       });
 
       if (res.ok) {
-        setAddedIds(prev => new Set(prev).add(resultId));
+        const seqName = sequenceId ? sequences.find(s => s.id === sequenceId)?.name || '' : '';
+        setAddedIds(prev => new Map(prev).set(resultId, seqName));
       }
     } finally {
       setAddingId(null);
@@ -273,21 +285,41 @@ export default function SearchPage() {
                     </div>
 
                     {/* Actions */}
-                    <div className="shrink-0">
-                      {isAdded ? (
-                        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-400 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/15">
-                          <CheckCircle2 size={13} />
-                          Added
-                        </span>
+                    <div className="shrink-0 flex items-center gap-2">
+                      {addedIds.has(resultId) ? (
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-400 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/15">
+                            <CheckCircle2 size={13} />
+                            Added
+                          </span>
+                          {addedIds.get(resultId) && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-medium text-violet-400 px-2 py-1 rounded-md bg-violet-500/10 border border-violet-500/15">
+                              <GitBranch size={10} />
+                              {addedIds.get(resultId)}
+                            </span>
+                          )}
+                        </div>
                       ) : (
-                        <button
-                          onClick={() => addToContacts(result)}
-                          disabled={isAdding}
-                          className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg btn-primary text-white disabled:opacity-50"
-                        >
-                          {isAdding ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
-                          Add to Contacts
-                        </button>
+                        <>
+                          {sequences.length > 0 && (
+                            <select
+                              value={selectedSequence}
+                              onChange={(e) => setSelectedSequence(e.target.value)}
+                              className="h-8 bg-[hsl(230,12%,10%)] text-white text-[11px] rounded-lg px-2 border border-[hsl(230,10%,15%)] focus:outline-none focus:border-blue-500/40 cursor-pointer max-w-[140px]"
+                            >
+                              <option value="">No sequence</option>
+                              {sequences.map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}
+                            </select>
+                          )}
+                          <button
+                            onClick={() => addToContacts(result, selectedSequence ? parseInt(selectedSequence) : undefined)}
+                            disabled={isAdding}
+                            className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg btn-primary text-white disabled:opacity-50 whitespace-nowrap"
+                          >
+                            {isAdding ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+                            {selectedSequence ? 'Add + Start Seq' : 'Add to Contacts'}
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>
