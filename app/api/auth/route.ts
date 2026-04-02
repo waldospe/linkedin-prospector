@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createToken } from '@/lib/auth';
-import { users } from '@/lib/db';
+import { users, activityLog } from '@/lib/db';
 import { checkRateLimit } from '@/lib/rate-limit';
 
 export async function POST(req: NextRequest) {
@@ -23,6 +23,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
     }
 
+    activityLog.log(user.id, 'login', 'user', user.id);
     const token = await createToken(user.id, user.role);
 
     const response = NextResponse.json({

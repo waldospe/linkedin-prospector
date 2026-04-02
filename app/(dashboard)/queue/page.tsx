@@ -68,14 +68,14 @@ export default function QueuePage() {
     { label: 'Pending', value: counts.pending, color: 'text-amber-400' },
     { label: 'Completed', value: counts.completed, color: 'text-emerald-400' },
     { label: 'Failed', value: counts.failed, color: 'text-red-400' },
-    { label: 'Total', value: counts.total, color: 'text-white' },
+    { label: 'Total', value: counts.total, color: 'text-foreground' },
   ];
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-white tracking-tight">Queue</h1>
+          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Queue</h1>
           <p className="text-sm text-muted-foreground mt-1">Queue processes automatically during your send window</p>
         </div>
         {counts.failed > 0 && (
@@ -90,7 +90,7 @@ export default function QueuePage() {
       </div>
 
       {/* Summary */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {summaryCards.map(({ label, value, color }) => (
           <div key={label} className="glass rounded-xl p-4">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</p>
@@ -102,7 +102,7 @@ export default function QueuePage() {
       {/* Queue list */}
       <div className="glass rounded-xl overflow-hidden">
         <div className="px-5 py-3 border-b border-border/50">
-          <span className="text-sm font-medium text-white">Queue Items</span>
+          <span className="text-sm font-medium text-foreground">Queue Items</span>
         </div>
         <div className="p-3">
           {loading ? (
@@ -124,7 +124,7 @@ export default function QueuePage() {
                     <div className="flex items-center gap-3">
                       <Icon className={`w-4 h-4 ${cfg.color}`} />
                       <div>
-                        <p className="text-sm font-medium text-white">{item.contact_name}</p>
+                        <p className="text-sm font-medium text-foreground">{item.contact_name}</p>
                         <p className="text-xs text-muted-foreground">
                           {item.sequence_name ? `${item.sequence_name} \u00B7 Step ${item.step_number}` : 'Manual action'}
                         </p>

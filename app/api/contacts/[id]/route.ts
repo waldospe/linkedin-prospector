@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserFromRequest } from '@/lib/api-auth';
-import { contacts, queue, sequences } from '@/lib/db';
+import { contacts, queue, sequences, activityLog } from '@/lib/db';
 import { substituteVariables } from '@/lib/constants';
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
@@ -43,6 +43,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     if (data.pause) {
       const db = (await import('@/lib/db')).getDb();
       db.prepare("UPDATE queue SET status = 'paused' WHERE contact_id = ? AND user_id = ? AND status = 'pending'").run(contactId, userId);
+      activityLog.log(userId, 'contact_paused', 'contact', contactId);
       return NextResponse.json({ success: true });
     }
 
@@ -50,15 +51,16 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     if (data.resume) {
       const db = (await import('@/lib/db')).getDb();
       db.prepare("UPDATE queue SET status = 'pending' WHERE contact_id = ? AND user_id = ? AND status = 'paused'").run(contactId, userId);
+      activityLog.log(userId, 'contact_resumed', 'contact', contactId);
       return NextResponse.json({ success: true });
     }
 
     // Handle status update
     if (data.status) {
       contacts.updateStatus(contactId, data.status, userId);
-      // If opted_out, also cancel pending queue items
       if (data.status === 'opted_out') {
         queue.deleteByContact(contactId, userId);
+        activityLog.log(userId, 'contact_opted_out', 'contact', contactId);
       }
       return NextResponse.json({ success: true });
     }
@@ -72,6 +74,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     if (data.linkedin_url !== undefined) editableFields.linkedin_url = data.linkedin_url;
     if (Object.keys(editableFields).length > 0) {
       contacts.update(contactId, userId, editableFields);
+      activityLog.log(userId, 'contact_updated', 'contact', contactId, `Updated: ${Object.keys(editableFields).join(', ')}`);
     }
     return NextResponse.json({ success: true });
   } catch (error) {
@@ -83,9 +86,9 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   try {
     const { userId } = getUserFromRequest(req);
     const contactId = Number(params.id);
-    // Clean up queue items first
     queue.deleteByContact(contactId, userId);
     contacts.delete(contactId, userId);
+    activityLog.log(userId, 'contact_deleted', 'contact', contactId);
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to delete contact' }, { status: 500 });

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserFromRequest } from '@/lib/api-auth';
-import { globalConfig, users } from '@/lib/db';
+import { globalConfig, users, activityLog } from '@/lib/db';
 
 export async function GET(req: NextRequest) {
   try {
@@ -58,6 +58,7 @@ export async function PUT(req: NextRequest) {
       }
     }
 
+    activityLog.log(userId, 'settings_updated', 'user', userId, `Updated: ${Object.keys(data).join(', ')}`);
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to update config' }, { status: 500 });

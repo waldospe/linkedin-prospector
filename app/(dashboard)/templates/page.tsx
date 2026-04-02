@@ -108,7 +108,7 @@ export default function TemplatesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-white tracking-tight">Templates</h1>
+          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Templates</h1>
           <p className="text-sm text-muted-foreground mt-1">Reusable message templates for outreach</p>
         </div>
         <Dialog>
@@ -117,7 +117,7 @@ export default function TemplatesPage() {
               <Plus size={15} /> New Template
             </span>
           </DialogTrigger>
-          <DialogContent className="glass border-border/50 text-white sm:rounded-2xl sm:max-w-2xl">
+          <DialogContent className="glass border-border/50 text-foreground sm:rounded-2xl sm:max-w-2xl">
             <DialogHeader><DialogTitle className="text-lg font-semibold">Create Template</DialogTitle></DialogHeader>
             <TemplateForm template={newTemplate} onChange={setNewTemplate} />
             <button onClick={saveTemplate} className="w-full h-10 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 transition-all mt-2">
@@ -143,10 +143,10 @@ export default function TemplatesPage() {
                   <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/15 flex items-center justify-center">
                     <FileText size={14} className="text-indigo-400" />
                   </div>
-                  <h3 className="text-sm font-medium text-white">{template.name}</h3>
+                  <h3 className="text-sm font-medium text-foreground">{template.name}</h3>
                 </div>
                 <div className="flex items-center gap-1">
-                  <button onClick={() => setEditingTemplate(template)} className="p-1.5 rounded-md text-muted-foreground hover:text-white hover:bg-secondary transition-all">
+                  <button onClick={() => setEditingTemplate(template)} className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-all">
                     <Edit2 size={13} />
                   </button>
                   <button onClick={() => deleteTemplate(template.id)} className="p-1.5 rounded-md text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-all">
@@ -176,7 +176,7 @@ export default function TemplatesPage() {
 
       {editingTemplate && (
         <Dialog open={!!editingTemplate} onOpenChange={() => setEditingTemplate(null)}>
-          <DialogContent className="glass border-border/50 text-white sm:rounded-2xl sm:max-w-2xl">
+          <DialogContent className="glass border-border/50 text-foreground sm:rounded-2xl sm:max-w-2xl">
             <DialogHeader><DialogTitle className="text-lg font-semibold">Edit Template</DialogTitle></DialogHeader>
             <TemplateForm template={editingTemplate} onChange={setEditingTemplate} />
             <button onClick={saveTemplate} className="w-full h-10 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 transition-all mt-2">

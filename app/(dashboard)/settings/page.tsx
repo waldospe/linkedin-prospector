@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { useUser } from '@/components/user-context';
-import { Save, Key, Clock, Shield, Lock, CheckCircle2, Globe, Calendar, Linkedin } from 'lucide-react';
+import { Save, Key, Clock, Shield, Lock, CheckCircle2, Globe, Calendar, Linkedin, Eye, EyeOff } from 'lucide-react';
 
 const TIMEZONES = [
   'America/New_York',
@@ -70,6 +70,11 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPasswords, setShowPasswords] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
 
   useEffect(() => { fetchConfig(); }, []);
 
@@ -112,6 +117,34 @@ export default function SettingsPage() {
     }));
   };
 
+  const changePassword = async () => {
+    if (!currentPassword || !newPassword) return;
+    if (newPassword.length < 6) { setMessage('New password must be at least 6 characters'); return; }
+    if (newPassword !== confirmPassword) { setMessage('Passwords do not match'); return; }
+    setChangingPassword(true);
+    try {
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setMessage('Password changed successfully');
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+      } else {
+        setMessage(data.error || 'Failed to change password');
+      }
+    } catch {
+      setMessage('Failed to change password');
+    } finally {
+      setChangingPassword(false);
+      setTimeout(() => setMessage(''), 4000);
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-4">
@@ -123,7 +156,7 @@ export default function SettingsPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold text-white tracking-tight">Settings</h1>
+        <h1 className="text-2xl font-semibold text-foreground tracking-tight">Settings</h1>
         <p className="text-sm text-muted-foreground mt-1">
           {isAdmin ? 'Manage global and personal configuration' : 'Your personal settings'}
         </p>
@@ -148,7 +181,7 @@ export default function SettingsPage() {
               <Lock size={14} className="text-amber-400" />
             </div>
             <div>
-              <h3 className="text-sm font-medium text-white">Unipile Configuration</h3>
+              <h3 className="text-sm font-medium text-foreground">Unipile Configuration</h3>
               <p className="text-xs text-muted-foreground">Global API credentials for all team members</p>
             </div>
             <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/15 ml-auto">
@@ -175,7 +208,7 @@ export default function SettingsPage() {
             <Linkedin size={14} className="text-blue-400" />
           </div>
           <div>
-            <h3 className="text-sm font-medium text-white">LinkedIn Connection</h3>
+            <h3 className="text-sm font-medium text-foreground">LinkedIn Connection</h3>
             <p className="text-xs text-muted-foreground">Connect your LinkedIn account for outreach</p>
           </div>
         </div>
@@ -214,7 +247,7 @@ export default function SettingsPage() {
             <Key size={14} className="text-violet-400" />
           </div>
           <div>
-            <h3 className="text-sm font-medium text-white">Pipedrive Integration</h3>
+            <h3 className="text-sm font-medium text-foreground">Pipedrive Integration</h3>
             <p className="text-xs text-muted-foreground">Your personal API key for contact sync</p>
           </div>
         </div>
@@ -231,14 +264,14 @@ export default function SettingsPage() {
             <Globe size={14} className="text-cyan-400" />
           </div>
           <div>
-            <h3 className="text-sm font-medium text-white">Timezone</h3>
+            <h3 className="text-sm font-medium text-foreground">Timezone</h3>
             <p className="text-xs text-muted-foreground">Used for your send schedule window</p>
           </div>
         </div>
         <select
           value={config.timezone}
           onChange={(e) => setConfig({ ...config, timezone: e.target.value })}
-          className="h-10 bg-background/50 text-white text-sm rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50 w-64"
+          className="h-10 bg-background/50 text-foreground text-sm rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50 w-64"
         >
           {TIMEZONES.map(tz => (
             <option key={tz} value={tz}>{tz.replace(/_/g, ' ')}</option>
@@ -253,7 +286,7 @@ export default function SettingsPage() {
             <Calendar size={14} className="text-indigo-400" />
           </div>
           <div>
-            <h3 className="text-sm font-medium text-white">Send Schedule</h3>
+            <h3 className="text-sm font-medium text-foreground">Send Schedule</h3>
             <p className="text-xs text-muted-foreground">When the queue is allowed to send messages</p>
           </div>
         </div>
@@ -269,7 +302,7 @@ export default function SettingsPage() {
                     onChange={(e) => updateDay(day, 'enabled', e.target.checked)}
                     className="w-4 h-4 rounded border-border bg-background accent-blue-600"
                   />
-                  <span className={`text-sm font-medium ${d.enabled ? 'text-white' : 'text-muted-foreground'}`}>
+                  <span className={`text-sm font-medium ${d.enabled ? 'text-foreground' : 'text-muted-foreground'}`}>
                     {DAY_LABELS[day]}
                   </span>
                 </label>
@@ -279,14 +312,14 @@ export default function SettingsPage() {
                       type="time"
                       value={d.start}
                       onChange={(e) => updateDay(day, 'start', e.target.value)}
-                      className="h-8 bg-background/50 text-white text-sm rounded-lg px-2 border border-border focus:outline-none focus:border-blue-500/50"
+                      className="h-8 bg-background/50 text-foreground text-sm rounded-lg px-2 border border-border focus:outline-none focus:border-blue-500/50"
                     />
                     <span className="text-xs text-muted-foreground">to</span>
                     <input
                       type="time"
                       value={d.end}
                       onChange={(e) => updateDay(day, 'end', e.target.value)}
-                      className="h-8 bg-background/50 text-white text-sm rounded-lg px-2 border border-border focus:outline-none focus:border-blue-500/50"
+                      className="h-8 bg-background/50 text-foreground text-sm rounded-lg px-2 border border-border focus:outline-none focus:border-blue-500/50"
                     />
                   </div>
                 )}
@@ -306,14 +339,14 @@ export default function SettingsPage() {
             <Shield size={14} className="text-blue-400" />
           </div>
           <div>
-            <h3 className="text-sm font-medium text-white">Daily Limits</h3>
+            <h3 className="text-sm font-medium text-foreground">Daily Limits</h3>
             <p className="text-xs text-muted-foreground">Stay within LinkedIn safety guidelines</p>
           </div>
         </div>
         <div>
-          <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Max Actions Per Day</label>
+          <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Max Connection Requests Per Day</label>
           <Input type="number" value={config.daily_limit} onChange={(e) => setConfig({ ...config, daily_limit: parseInt(e.target.value) })} className="bg-background/50 border-border h-10 w-32" />
-          <p className="text-xs text-muted-foreground mt-1.5">Total connections + messages per day</p>
+          <p className="text-xs text-muted-foreground mt-1.5">Connection requests per day (messages are unlimited)</p>
         </div>
       </div>
 
@@ -324,7 +357,7 @@ export default function SettingsPage() {
             <Clock size={14} className="text-emerald-400" />
           </div>
           <div>
-            <h3 className="text-sm font-medium text-white">Timing Controls</h3>
+            <h3 className="text-sm font-medium text-foreground">Timing Controls</h3>
             <p className="text-xs text-muted-foreground">Randomized delays between actions</p>
           </div>
         </div>
@@ -336,6 +369,68 @@ export default function SettingsPage() {
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Max Delay (min)</label>
             <Input type="number" value={config.message_delay_max} onChange={(e) => setConfig({ ...config, message_delay_max: parseInt(e.target.value) })} className="bg-background/50 border-border h-10" />
+          </div>
+        </div>
+      </div>
+
+      {/* Change Password */}
+      <div className="glass rounded-xl p-6">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/15 flex items-center justify-center">
+            <Key size={14} className="text-amber-400" />
+          </div>
+          <div>
+            <h3 className="text-sm font-medium text-foreground">Change Password</h3>
+            <p className="text-xs text-muted-foreground">Update your login password</p>
+          </div>
+        </div>
+        <div className="space-y-3 max-w-sm">
+          <div className="relative">
+            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Current Password</label>
+            <Input
+              type={showPasswords ? 'text' : 'password'}
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              placeholder="Enter current password"
+              className="bg-background/50 border-border h-10 pr-10"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">New Password</label>
+            <Input
+              type={showPasswords ? 'text' : 'password'}
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="At least 6 characters"
+              className="bg-background/50 border-border h-10"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Confirm New Password</label>
+            <Input
+              type={showPasswords ? 'text' : 'password'}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Confirm new password"
+              className="bg-background/50 border-border h-10"
+            />
+          </div>
+          <div className="flex items-center gap-3 pt-1">
+            <button
+              onClick={changePassword}
+              disabled={changingPassword || !currentPassword || !newPassword || !confirmPassword}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-600 text-white text-sm font-medium hover:bg-amber-500 disabled:opacity-40 transition-all"
+            >
+              <Lock size={14} />
+              {changingPassword ? 'Changing...' : 'Change Password'}
+            </button>
+            <button
+              onClick={() => setShowPasswords(!showPasswords)}
+              className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-all"
+              title={showPasswords ? 'Hide passwords' : 'Show passwords'}
+            >
+              {showPasswords ? <EyeOff size={15} /> : <Eye size={15} />}
+            </button>
           </div>
         </div>
       </div>

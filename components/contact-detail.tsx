@@ -27,34 +27,66 @@ export default function ContactDetail({ contactId, onClose }: ContactDetailProps
     messageEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [data?.linkedinConversation]);
 
-  const fetchDetail = async () => {
-    setLoading(true);
+  const fetchDetail = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const res = await fetch(`/api/contacts/${contactId}/detail${apiQuery}`);
       if (res.ok) setData(await res.json());
-    } finally { setLoading(false); }
+    } finally { if (!silent) setLoading(false); }
   };
 
   const sendMessage = async () => {
     if (!message.trim() || sending) return;
+    const sentText = message.trim();
     setSending(true);
     setSendResult('');
+
+    // Optimistically add the message to the conversation
+    setMessage('');
+    setData((prev: any) => {
+      if (!prev) return prev;
+      const optimisticMsg = {
+        id: `optimistic-${Date.now()}`,
+        text: sentText,
+        content: sentText,
+        is_me: true,
+        timestamp: new Date().toISOString(),
+        sent_at: new Date().toISOString(),
+        _optimistic: true,
+      };
+      const hasConversation = prev.linkedinConversation?.length > 0;
+      return {
+        ...prev,
+        linkedinConversation: hasConversation
+          ? [...prev.linkedinConversation, optimisticMsg]
+          : prev.linkedinConversation,
+        storedMessages: !hasConversation
+          ? [...(prev.storedMessages || []), optimisticMsg]
+          : prev.storedMessages,
+      };
+    });
+
     try {
       const res = await fetch(`/api/contacts/${contactId}/send-message${apiQuery}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: message.trim() }),
+        body: JSON.stringify({ message: sentText }),
       });
       const result = await res.json();
       if (res.ok) {
         setSendResult(result.sequenceCancelled > 0 ? 'Sent! Sequence paused.' : 'Sent!');
-        setMessage('');
-        fetchDetail(); // refresh conversation
+        // Silently refresh to get the real conversation data
+        fetchDetail(true);
       } else {
         setSendResult(result.error || 'Failed to send');
+        // Revert optimistic update on failure
+        setMessage(sentText);
+        fetchDetail(true);
       }
     } catch {
       setSendResult('Failed to send');
+      setMessage(sentText);
+      fetchDetail(true);
     } finally {
       setSending(false);
       setTimeout(() => setSendResult(''), 4000);
@@ -75,13 +107,13 @@ export default function ContactDetail({ contactId, onClose }: ContactDetailProps
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
 
       {/* Panel */}
-      <div className="absolute right-0 top-0 bottom-0 w-full max-w-[800px] bg-[hsl(230,15%,6.5%)] border-l border-[hsl(230,10%,14%)] flex animate-slide-in-right overflow-hidden">
+      <div className="absolute right-0 top-0 bottom-0 w-full max-w-[800px] bg-background border-l border-border flex animate-slide-in-right overflow-hidden">
 
         {/* Left: Profile Card */}
-        <div className="w-[320px] border-r border-[hsl(230,10%,12%)] p-6 overflow-y-auto shrink-0">
+        <div className="w-[320px] border-r border-border p-6 overflow-y-auto shrink-0">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-widest">Contact</h2>
-            <button onClick={onClose} className="p-1.5 rounded-lg text-muted-foreground hover:text-white hover:bg-white/5 transition-all">
+            <button onClick={onClose} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all">
               <X size={16} />
             </button>
           </div>
@@ -95,13 +127,13 @@ export default function ContactDetail({ contactId, onClose }: ContactDetailProps
               {/* Avatar + Name */}
               <div className="text-center">
                 {contact.avatar_url && contact.avatar_url !== 'none' ? (
-                  <img src={contact.avatar_url} alt="" className="w-20 h-20 rounded-2xl object-cover mx-auto border-2 border-[hsl(230,10%,16%)] shadow-lg" />
+                  <img src={contact.avatar_url} alt="" className="w-20 h-20 rounded-2xl object-cover mx-auto border-2 border-border shadow-lg" />
                 ) : (
                   <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-500/20 to-violet-500/20 border-2 border-blue-500/15 flex items-center justify-center text-2xl font-bold text-blue-300 mx-auto">
                     {(contact.first_name || contact.name || '?').charAt(0)}
                   </div>
                 )}
-                <h3 className="text-lg font-semibold text-white mt-4">
+                <h3 className="text-lg font-semibold text-foreground mt-4">
                   {[contact.first_name, contact.last_name].filter(Boolean).join(' ') || contact.name}
                 </h3>
                 <p className="text-sm text-muted-foreground mt-0.5">{contact.title}</p>
@@ -132,7 +164,7 @@ export default function ContactDetail({ contactId, onClose }: ContactDetailProps
                   {profile.headline && (
                     <div>
                       <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">Headline</p>
-                      <p className="text-xs text-white/80 leading-relaxed">{profile.headline}</p>
+                      <p className="text-xs text-foreground/80 leading-relaxed">{profile.headline}</p>
                     </div>
                   )}
                   <div className="grid grid-cols-2 gap-2">
@@ -191,10 +223,10 @@ export default function ContactDetail({ contactId, onClose }: ContactDetailProps
 
         {/* Right: Conversation */}
         <div className="flex-1 flex flex-col">
-          <div className="px-6 py-4 border-b border-[hsl(230,10%,12%)]">
+          <div className="px-6 py-4 border-b border-border">
             <div className="flex items-center gap-2">
               <MessageCircle size={16} className="text-blue-400" />
-              <h2 className="text-sm font-semibold text-white">Conversation</h2>
+              <h2 className="text-sm font-semibold text-foreground">Conversation</h2>
             </div>
           </div>
 
@@ -221,8 +253,8 @@ export default function ContactDetail({ contactId, onClose }: ContactDetailProps
                     <div key={msg.id || idx} className={`flex ${msg.is_me ? 'justify-end' : 'justify-start'}`}>
                       <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
                         msg.is_me
-                          ? 'bg-blue-600/20 text-blue-100 rounded-br-md'
-                          : 'bg-[hsl(230,12%,12%)] text-white/90 rounded-bl-md'
+                          ? 'bg-blue-600/20 text-blue-100 dark:text-blue-100 rounded-br-md'
+                          : 'bg-secondary text-foreground/90 rounded-bl-md'
                       }`}>
                         <p className="whitespace-pre-wrap">{msg.text}</p>
                         {msg.timestamp && (
@@ -254,7 +286,7 @@ export default function ContactDetail({ contactId, onClose }: ContactDetailProps
           </div>
 
           {/* Message input */}
-          <div className="px-6 py-4 border-t border-[hsl(230,10%,12%)]">
+          <div className="px-6 py-4 border-t border-border">
             {sendResult && (
               <div className={`text-xs mb-2 px-3 py-1.5 rounded-lg ${
                 sendResult.includes('Sent') ? 'text-emerald-400 bg-emerald-500/10' : 'text-red-400 bg-red-500/10'
@@ -270,7 +302,7 @@ export default function ContactDetail({ contactId, onClose }: ContactDetailProps
                 placeholder={profile?.is_relationship || ['connected', 'msg_sent', 'replied', 'positive', 'meeting_booked'].includes(contact?.status) ? 'Type a message... (Enter to send, Shift+Enter for newline)' : 'Connect with this person first to send messages'}
                 disabled={!profile?.is_relationship && !['connected', 'msg_sent', 'replied', 'positive', 'meeting_booked'].includes(contact?.status)}
                 rows={2}
-                className="flex-1 bg-[hsl(230,12%,10%)] border border-[hsl(230,10%,15%)] rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-muted-foreground/40 focus:outline-none focus:border-blue-500/40 focus:ring-1 focus:ring-blue-500/20 resize-none disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                className="flex-1 input-field rounded-xl px-4 py-2.5 text-sm placeholder:text-muted-foreground/40 resize-none disabled:opacity-40 disabled:cursor-not-allowed transition-all"
               />
               <button
                 onClick={sendMessage}

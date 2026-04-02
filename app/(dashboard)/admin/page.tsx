@@ -69,18 +69,18 @@ export default function AdminPage() {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-white tracking-tight">System Admin</h1>
+          <h1 className="text-2xl font-semibold text-foreground tracking-tight">System Admin</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Server time: {new Date(data.serverTime).toLocaleString()} &middot; Auto-refreshing
           </p>
         </div>
-        <button onClick={fetchData} className="p-2 rounded-lg text-muted-foreground hover:text-white hover:bg-secondary transition-all">
+        <button onClick={fetchData} className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-all">
           <RefreshCw size={16} />
         </button>
       </div>
 
       {/* Top-level metrics */}
-      <div className="grid grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         {[
           { label: 'Total Users', value: totalUsers, icon: Users, color: 'blue' },
           { label: 'LinkedIn Linked', value: `${linkedUsers}/${totalUsers}`, icon: Linkedin, color: 'emerald' },
@@ -93,7 +93,7 @@ export default function AdminPage() {
               <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">{label}</span>
               <Icon size={14} className={`text-${color}-400`} />
             </div>
-            <p className="text-2xl font-semibold text-white tabular-nums">{value}</p>
+            <p className="text-2xl font-semibold text-foreground tabular-nums">{value}</p>
           </div>
         ))}
       </div>
@@ -104,7 +104,7 @@ export default function AdminPage() {
         <div className="glass rounded-xl p-5">
           <div className="flex items-center gap-2 mb-4">
             <Clock size={16} className="text-muted-foreground" />
-            <span className="text-sm font-medium text-white">Cron Status</span>
+            <span className="text-sm font-medium text-foreground">Cron Status</span>
           </div>
           <div className="space-y-3">
             <div className="flex items-center justify-between">
@@ -123,7 +123,7 @@ export default function AdminPage() {
             </div>
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground">Log size</span>
-              <span className="text-xs text-white">{formatBytes(data.cronLogSize)}</span>
+              <span className="text-xs text-foreground">{formatBytes(data.cronLogSize)}</span>
             </div>
           </div>
         </div>
@@ -132,7 +132,7 @@ export default function AdminPage() {
         <div className="glass rounded-xl p-5">
           <div className="flex items-center gap-2 mb-4">
             <Activity size={16} className="text-muted-foreground" />
-            <span className="text-sm font-medium text-white">Queue</span>
+            <span className="text-sm font-medium text-foreground">Queue</span>
           </div>
           <div className="space-y-2">
             {[
@@ -152,20 +152,20 @@ export default function AdminPage() {
         <div className="glass rounded-xl p-5">
           <div className="flex items-center gap-2 mb-4">
             <Database size={16} className="text-muted-foreground" />
-            <span className="text-sm font-medium text-white">Database</span>
+            <span className="text-sm font-medium text-foreground">Database</span>
           </div>
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground">DB size</span>
-              <span className="text-xs text-white">{formatBytes(data.dbSize)}</span>
+              <span className="text-xs text-foreground">{formatBytes(data.dbSize)}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground">Contacts</span>
-              <span className="text-xs text-white">{totalContacts}</span>
+              <span className="text-xs text-foreground">{totalContacts}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground">Queue items</span>
-              <span className="text-xs text-white">{(queueMap.pending || 0) + (queueMap.completed || 0) + (queueMap.failed || 0)}</span>
+              <span className="text-xs text-foreground">{(queueMap.pending || 0) + (queueMap.completed || 0) + (queueMap.failed || 0)}</span>
             </div>
           </div>
         </div>
@@ -175,12 +175,12 @@ export default function AdminPage() {
       <div className="glass rounded-xl p-5">
         <div className="flex items-center gap-2 mb-4">
           <Shield size={16} className="text-muted-foreground" />
-          <span className="text-sm font-medium text-white">Teams</span>
+          <span className="text-sm font-medium text-foreground">Teams</span>
         </div>
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {data.teams.map((team: any) => (
             <div key={team.id} className="p-3 rounded-lg bg-secondary/30 border border-border/50">
-              <p className="text-sm font-medium text-white">{team.name}</p>
+              <p className="text-sm font-medium text-foreground">{team.name}</p>
               <p className="text-xs text-muted-foreground mt-1">
                 {team.member_count} members &middot; {team.linked_count} linked
               </p>
@@ -193,7 +193,7 @@ export default function AdminPage() {
       <div className="glass rounded-xl p-5">
         <div className="flex items-center gap-2 mb-4">
           <Users size={16} className="text-muted-foreground" />
-          <span className="text-sm font-medium text-white">All Users</span>
+          <span className="text-sm font-medium text-foreground">All Users</span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -217,7 +217,7 @@ export default function AdminPage() {
                   <tr key={user.id} className="border-b border-border/30 hover:bg-secondary/20">
                     <td className="py-2.5 pr-4">
                       <div>
-                        <p className="text-white font-medium">{user.name}</p>
+                        <p className="text-foreground font-medium">{user.name}</p>
                         <p className="text-[11px] text-muted-foreground">{user.email}</p>
                       </div>
                     </td>
@@ -234,7 +234,7 @@ export default function AdminPage() {
                         <XCircle size={14} className="text-muted-foreground mx-auto" />
                       )}
                     </td>
-                    <td className="py-2.5 pr-4 text-right text-xs text-white tabular-nums">{user.contact_count}</td>
+                    <td className="py-2.5 pr-4 text-right text-xs text-foreground tabular-nums">{user.contact_count}</td>
                     <td className="py-2.5 pr-4 text-right text-xs text-amber-400 tabular-nums">{user.pending_queue}</td>
                     <td className="py-2.5 pr-4 text-right text-xs text-emerald-400 tabular-nums">{user.completed_queue}</td>
                     <td className="py-2.5 pr-4 text-right text-xs text-red-400 tabular-nums">{user.failed_queue}</td>
@@ -259,7 +259,7 @@ export default function AdminPage() {
       <div className="glass rounded-xl p-5">
         <div className="flex items-center gap-2 mb-4">
           <BarChart3 size={16} className="text-muted-foreground" />
-          <span className="text-sm font-medium text-white">Today&apos;s Sends by User</span>
+          <span className="text-sm font-medium text-foreground">Today&apos;s Sends by User</span>
         </div>
         <div className="space-y-3">
           {data.todayStats.length === 0 ? (
@@ -273,7 +273,7 @@ export default function AdminPage() {
               return (
                 <div key={stat.user_id}>
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-medium text-white">{stat.user_name}</span>
+                    <span className="text-xs font-medium text-foreground">{stat.user_name}</span>
                     <span className="text-xs text-muted-foreground tabular-nums">
                       {stat.connections_sent}c + {stat.messages_sent}m = {total}/{limit}
                     </span>
@@ -292,13 +292,13 @@ export default function AdminPage() {
       <div className="glass rounded-xl p-5">
         <div className="flex items-center gap-2 mb-4">
           <TrendingUp size={16} className="text-muted-foreground" />
-          <span className="text-sm font-medium text-white">System-wide Contact Funnel</span>
+          <span className="text-sm font-medium text-foreground">System-wide Contact Funnel</span>
         </div>
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {data.contactStats.map((stat: any) => (
             <div key={stat.status} className="p-3 rounded-lg bg-secondary/30">
               <p className="text-xs text-muted-foreground capitalize">{stat.status.replace(/_/g, ' ')}</p>
-              <p className="text-lg font-semibold text-white tabular-nums mt-1">{stat.count}</p>
+              <p className="text-lg font-semibold text-foreground tabular-nums mt-1">{stat.count}</p>
               <p className="text-[10px] text-muted-foreground">{totalContacts > 0 ? ((stat.count / totalContacts) * 100).toFixed(0) : 0}%</p>
             </div>
           ))}
@@ -310,13 +310,13 @@ export default function AdminPage() {
         <div className="glass rounded-xl p-5">
           <div className="flex items-center gap-2 mb-4">
             <AlertTriangle size={16} className="text-red-400" />
-            <span className="text-sm font-medium text-white">Recent Errors</span>
+            <span className="text-sm font-medium text-foreground">Recent Errors</span>
           </div>
           <div className="space-y-2 max-h-[300px] overflow-auto">
             {data.recentErrors.map((err: any) => (
               <div key={err.id} className="p-3 rounded-lg bg-red-500/5 border border-red-500/10">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-white font-medium">{err.contact_name}</span>
+                  <span className="text-xs text-foreground font-medium">{err.contact_name}</span>
                   <span className="text-[10px] text-muted-foreground">{err.user_name} &middot; {err.action_type}</span>
                 </div>
                 <p className="text-xs text-red-400 mt-1 truncate">{err.error}</p>

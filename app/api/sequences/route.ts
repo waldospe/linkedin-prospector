@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getEffectiveUser } from '@/lib/api-auth';
-import { sequences } from '@/lib/db';
+import { sequences, activityLog } from '@/lib/db';
 
 export async function GET(req: NextRequest) {
   try {
@@ -21,6 +21,7 @@ export async function POST(req: NextRequest) {
     const { effectiveUserId } = getEffectiveUser(req);
     const { name, steps, visibility, shared_with_user_ids } = await req.json();
     const result = sequences.create(effectiveUserId!, name, steps, visibility, shared_with_user_ids);
+    activityLog.log(effectiveUserId!, 'sequence_created', 'sequence', result.lastInsertRowid as number, `Created "${name}"`);
     return NextResponse.json({ id: result.lastInsertRowid });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to create sequence' }, { status: 500 });

@@ -6,13 +6,13 @@ import { users } from '@/lib/db';
 export async function POST(req: NextRequest) {
   try {
     const data = await req.json();
-    console.log('UNIPILE CALLBACK:', JSON.stringify(data));
+    // Callback received
 
     const accountId = data.account_id || data.accountId;
     const internalUserId = data.name; // we passed our userId as 'name'
 
     if (!accountId || !internalUserId) {
-      console.error('UNIPILE CALLBACK: missing account_id or name', data);
+      console.error('UNIPILE CALLBACK: missing account_id or name');
       return NextResponse.json({ error: 'Missing data' }, { status: 400 });
     }
 
@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
 
     // Update user's unipile_account_id
     users.update(userId, { unipile_account_id: accountId });
-    console.log(`UNIPILE CALLBACK: linked account ${accountId} to user ${userId} (${(user as any).name})`);
+    // Successfully linked
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

@@ -54,14 +54,14 @@ export async function POST(req: NextRequest) {
 
     if (!res.ok) {
       const errText = await res.text();
-      console.log('LinkedIn search error:', res.status, errText);
+      // Search failed
       return NextResponse.json({ error: `Search failed: ${errText.slice(0, 200)}` }, { status: res.status });
     }
 
     const data = await res.json();
     return NextResponse.json(data);
   } catch (error: any) {
-    console.log('LinkedIn search fatal error:', error.message);
+    console.error('Search error:', error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

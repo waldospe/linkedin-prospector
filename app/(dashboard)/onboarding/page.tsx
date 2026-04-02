@@ -44,14 +44,14 @@ export default function OnboardingPage() {
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 mb-4">
             <Zap className="w-6 h-6 text-blue-400" />
           </div>
-          <h1 className="text-2xl font-semibold text-white tracking-tight">Welcome, {currentUser.name}!</h1>
+          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Welcome, {currentUser.name}!</h1>
           <p className="text-sm text-muted-foreground mt-2">Select your team to get started</p>
         </div>
 
         <div className="glass rounded-2xl p-6 space-y-4">
           <div className="flex items-center gap-2 mb-2">
             <Users size={16} className="text-muted-foreground" />
-            <span className="text-sm font-medium text-white">Your Team</span>
+            <span className="text-sm font-medium text-foreground">Your Team</span>
           </div>
 
           {teams.length === 0 ? (
@@ -65,7 +65,7 @@ export default function OnboardingPage() {
                   className={`w-full p-4 rounded-xl border text-left transition-all ${
                     selectedTeam === team.id
                       ? 'bg-blue-500/10 border-blue-500/30 text-blue-400'
-                      : 'bg-secondary/50 border-border hover:border-border/80 hover:bg-secondary text-white'
+                      : 'bg-secondary/50 border-border hover:border-border/80 hover:bg-secondary text-foreground'
                   }`}
                 >
                   <span className="text-sm font-medium">{team.name}</span>

@@ -123,7 +123,7 @@ export default function SequencesPage() {
             <select
               value={step.action}
               onChange={(e) => updateStep(seq, i, 'action', e.target.value)}
-              className="bg-secondary border border-border rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500/50"
+              className="bg-secondary border border-border rounded-lg px-3 py-1.5 text-sm text-foreground focus:outline-none focus:border-blue-500/50"
             >
               <option value="connection">Connection Request</option>
               <option value="message">Message</option>
@@ -189,7 +189,7 @@ export default function SequencesPage() {
                       updateStep(seq, i, 'variants', variants);
                     }}
                     rows={3}
-                    className="w-full bg-secondary/50 border border-border rounded-lg pl-10 pr-3 py-2 text-sm text-white placeholder:text-muted-foreground/40 focus:outline-none focus:border-blue-500/50 resize-y min-h-[60px]"
+                    className="w-full bg-secondary/50 border border-border rounded-lg pl-10 pr-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-blue-500/50 resize-y min-h-[60px]"
                     placeholder={`Variant ${v.label} message...`}
                   />
                 </div>
@@ -197,7 +197,7 @@ export default function SequencesPage() {
               <button
                 type="button"
                 onClick={() => { updateStep(seq, i, 'variants', undefined); }}
-                className="text-[10px] text-muted-foreground hover:text-white"
+                className="text-[10px] text-muted-foreground hover:text-foreground"
               >
                 Switch to single message
               </button>
@@ -226,7 +226,7 @@ export default function SequencesPage() {
                 value={step.template}
                 onChange={(e) => updateStep(seq, i, 'template', e.target.value)}
                 rows={4}
-                className="w-full bg-secondary/50 border border-border rounded-lg px-3 py-2 text-sm text-white placeholder:text-muted-foreground/40 focus:outline-none focus:border-blue-500/50 resize-y min-h-[80px]"
+                className="w-full bg-secondary/50 border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-blue-500/50 resize-y min-h-[80px]"
               />
               <p className="text-[10px] text-muted-foreground mt-1">Variables like {'{{firstName}}'} are replaced with contact data when sent</p>
             </div>
@@ -262,7 +262,7 @@ export default function SequencesPage() {
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
                 isActive
                   ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                  : 'bg-secondary/50 text-muted-foreground border-border hover:text-white hover:bg-secondary'
+                  : 'bg-secondary/50 text-muted-foreground border-border hover:text-foreground hover:bg-secondary'
               }`}
             >
               <Icon size={12} />
@@ -290,7 +290,7 @@ export default function SequencesPage() {
                 className={`px-2.5 py-1 rounded-md text-xs font-medium border transition-all ${
                   selected
                     ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                    : 'bg-secondary/50 text-muted-foreground border-border hover:text-white'
+                    : 'bg-secondary/50 text-muted-foreground border-border hover:text-foreground'
                 }`}
               >
                 {u.name}
@@ -312,7 +312,7 @@ export default function SequencesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-white tracking-tight">Sequences</h1>
+          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Sequences</h1>
           <p className="text-sm text-muted-foreground mt-1">Automated multi-step outreach workflows</p>
         </div>
         <Dialog>
@@ -321,12 +321,12 @@ export default function SequencesPage() {
               <Plus size={15} /> New Sequence
             </span>
           </DialogTrigger>
-          <DialogContent className="glass border-border/50 text-white sm:rounded-2xl sm:max-w-2xl">
+          <DialogContent className="glass border-border/50 text-foreground sm:rounded-2xl sm:max-w-2xl">
             <DialogHeader><DialogTitle className="text-lg font-semibold">Create Sequence</DialogTitle></DialogHeader>
             <div className="space-y-4 mt-2">
               <Input placeholder="Sequence name" value={newSequence.name} onChange={(e) => setNewSequence({ ...newSequence, name: e.target.value })} className="bg-background/50 border-border h-10" />
               {renderSteps(newSequence.steps, null)}
-              <button onClick={() => addStep(null)} className="w-full py-2 rounded-lg border border-dashed border-border text-sm text-muted-foreground hover:text-white hover:border-border/80 transition-all">
+              <button onClick={() => addStep(null)} className="w-full py-2 rounded-lg border border-dashed border-border text-sm text-muted-foreground hover:text-foreground hover:border-border/80 transition-all">
                 <Plus size={14} className="inline mr-1" /> Add Step
               </button>
               {renderVisibility(
@@ -360,7 +360,7 @@ export default function SequencesPage() {
                     <GitBranch size={14} className="text-blue-400" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-medium text-white">{seq.name}</h3>
+                    <h3 className="text-sm font-medium text-foreground">{seq.name}</h3>
                     <p className="text-xs text-muted-foreground">{seq.steps.length} steps</p>
                   </div>
                   <span className={`text-xs font-medium px-2 py-0.5 rounded-md ${
@@ -390,7 +390,7 @@ export default function SequencesPage() {
                       }).then(fetchSequences);
                     }}
                   />
-                  <button onClick={() => setEditingSequence(seq)} className="p-1.5 rounded-md text-muted-foreground hover:text-white hover:bg-secondary transition-all">
+                  <button onClick={() => setEditingSequence(seq)} className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-all">
                     <Edit2 size={14} />
                   </button>
                   <button onClick={() => deleteSequence(seq.id)} className="p-1.5 rounded-md text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-all">
@@ -419,12 +419,12 @@ export default function SequencesPage() {
 
       {editingSequence && (
         <Dialog open={!!editingSequence} onOpenChange={() => setEditingSequence(null)}>
-          <DialogContent className="glass border-border/50 text-white sm:rounded-2xl sm:max-w-2xl">
+          <DialogContent className="glass border-border/50 text-foreground sm:rounded-2xl sm:max-w-2xl">
             <DialogHeader><DialogTitle className="text-lg font-semibold">Edit Sequence</DialogTitle></DialogHeader>
             <div className="space-y-4 mt-2">
               <Input placeholder="Sequence name" value={editingSequence.name} onChange={(e) => setEditingSequence({ ...editingSequence, name: e.target.value })} className="bg-background/50 border-border h-10" />
               {renderSteps(editingSequence.steps, editingSequence)}
-              <button onClick={() => addStep(editingSequence)} className="w-full py-2 rounded-lg border border-dashed border-border text-sm text-muted-foreground hover:text-white hover:border-border/80 transition-all">
+              <button onClick={() => addStep(editingSequence)} className="w-full py-2 rounded-lg border border-dashed border-border text-sm text-muted-foreground hover:text-foreground hover:border-border/80 transition-all">
                 <Plus size={14} className="inline mr-1" /> Add Step
               </button>
               {(editingSequence.user_id === currentUser?.id || isAdmin) && renderVisibility(

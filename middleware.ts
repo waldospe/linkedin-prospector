@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
 
 const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'moco-linkedin-prospector-secure-key'
+  process.env.JWT_SECRET || 'moco-linkedin-prospector-dev-key'
 );
 
 async function decodeToken(token: string): Promise<{ userId: number; role: string } | null> {

@@ -57,8 +57,8 @@ export default function AnalyticsPage() {
   const maxPositive = Math.max(...POSITIVE_STAGES.map(s => funnelMap[s] || 0), 1);
 
   const tooltipStyle = {
-    contentStyle: { backgroundColor: 'hsl(228 14% 10%)', border: '1px solid hsl(228 11% 18%)', borderRadius: '8px', fontSize: '12px' },
-    labelStyle: { color: 'hsl(220 10% 50%)', marginBottom: '4px' },
+    contentStyle: { backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px', color: 'hsl(var(--foreground))' },
+    labelStyle: { color: 'hsl(var(--muted-foreground))', marginBottom: '4px' },
   };
 
   const statCards = [
@@ -71,12 +71,12 @@ export default function AnalyticsPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold text-white tracking-tight">Analytics</h1>
+        <h1 className="text-2xl font-semibold text-foreground tracking-tight">Analytics</h1>
         <p className="text-sm text-muted-foreground mt-1">Performance metrics and campaign insights</p>
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {statCards.map(({ label, value, icon: Icon, color, bg }) => (
           <div key={label} className="glass rounded-xl p-5">
             <div className="flex items-center justify-between mb-3">
@@ -85,7 +85,7 @@ export default function AnalyticsPage() {
                 <Icon size={15} />
               </div>
             </div>
-            <p className="text-3xl font-semibold text-white tabular-nums">{value}</p>
+            <p className="text-3xl font-semibold text-foreground tabular-nums">{value}</p>
           </div>
         ))}
       </div>
@@ -95,7 +95,7 @@ export default function AnalyticsPage() {
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
             <Users size={16} className="text-muted-foreground" />
-            <span className="text-sm font-medium text-white">Outreach Funnel</span>
+            <span className="text-sm font-medium text-foreground">Outreach Funnel</span>
           </div>
           <span className="text-xs text-muted-foreground">{totalContacts} total contacts</span>
         </div>
@@ -103,7 +103,7 @@ export default function AnalyticsPage() {
         {totalContacts === 0 ? (
           <div className="py-8 text-center text-muted-foreground text-sm">Import contacts to see your funnel</div>
         ) : (
-          <div className="grid grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {/* Positive funnel */}
             <div>
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Pipeline</p>
@@ -122,7 +122,7 @@ export default function AnalyticsPage() {
                           <span className={`text-xs font-medium ${colors.text}`}>{stage.label}</span>
                         </div>
                         <div className="flex items-center gap-3">
-                          <span className="text-sm font-semibold text-white tabular-nums">{count}</span>
+                          <span className="text-sm font-semibold text-foreground tabular-nums">{count}</span>
                           <span className="text-[10px] text-muted-foreground tabular-nums w-10 text-right">{pct.toFixed(0)}%</span>
                         </div>
                       </div>
@@ -151,7 +151,7 @@ export default function AnalyticsPage() {
                         <span className={`text-xs font-medium ${colors.text}`}>{stage.label}</span>
                       </div>
                       <div className="flex items-center gap-3">
-                        <span className="text-sm font-semibold text-white tabular-nums">{count}</span>
+                        <span className="text-sm font-semibold text-foreground tabular-nums">{count}</span>
                         <span className="text-[10px] text-muted-foreground tabular-nums w-10 text-right">{pct.toFixed(0)}%</span>
                       </div>
                     </div>
@@ -174,7 +174,7 @@ export default function AnalyticsPage() {
                     return (
                       <div key={label} className="flex items-center justify-between p-3 rounded-lg bg-secondary/30">
                         <span className="text-xs text-muted-foreground">{label}</span>
-                        <span className="text-sm font-semibold text-white tabular-nums">{rate.toFixed(1)}%</span>
+                        <span className="text-sm font-semibold text-foreground tabular-nums">{rate.toFixed(1)}%</span>
                       </div>
                     );
                   })}
@@ -186,19 +186,19 @@ export default function AnalyticsPage() {
       </div>
 
       {/* Charts */}
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="glass rounded-xl p-5">
           <div className="flex items-center gap-2 mb-5">
             <BarChart3 size={16} className="text-muted-foreground" />
-            <span className="text-sm font-medium text-white">Daily Activity</span>
+            <span className="text-sm font-medium text-foreground">Daily Activity</span>
           </div>
           <div className="h-56">
             {chartData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData} barGap={2}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(228 11% 18%)" />
-                  <XAxis dataKey="date" stroke="hsl(220 10% 40%)" fontSize={10} tickLine={false} axisLine={false} />
-                  <YAxis stroke="hsl(220 10% 40%)" fontSize={10} tickLine={false} axisLine={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" fontSize={10} tickLine={false} axisLine={false} />
+                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} tickLine={false} axisLine={false} />
                   <Tooltip {...tooltipStyle} />
                   <Bar dataKey="connections" fill="hsl(217 91% 60%)" radius={[3, 3, 0, 0]} name="Connections" />
                   <Bar dataKey="messages" fill="hsl(239 84% 67%)" radius={[3, 3, 0, 0]} name="Messages" />
@@ -214,15 +214,15 @@ export default function AnalyticsPage() {
         <div className="glass rounded-xl p-5">
           <div className="flex items-center gap-2 mb-5">
             <TrendingUp size={16} className="text-muted-foreground" />
-            <span className="text-sm font-medium text-white">Response Trend</span>
+            <span className="text-sm font-medium text-foreground">Response Trend</span>
           </div>
           <div className="h-56">
             {chartData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(228 11% 18%)" />
-                  <XAxis dataKey="date" stroke="hsl(220 10% 40%)" fontSize={10} tickLine={false} axisLine={false} />
-                  <YAxis stroke="hsl(220 10% 40%)" fontSize={10} tickLine={false} axisLine={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" fontSize={10} tickLine={false} axisLine={false} />
+                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} tickLine={false} axisLine={false} />
                   <Tooltip {...tooltipStyle} />
                   <Line type="monotone" dataKey="messages" stroke="hsl(239 84% 67%)" strokeWidth={2} dot={false} name="Messages" />
                   <Line type="monotone" dataKey="replies" stroke="hsl(160 84% 39%)" strokeWidth={2} dot={false} name="Replies" />
@@ -239,14 +239,14 @@ export default function AnalyticsPage() {
         <div className="glass rounded-xl p-5">
           <div className="flex items-center gap-2 mb-5">
             <Clock size={16} className="text-muted-foreground" />
-            <span className="text-sm font-medium text-white">Smart Scheduling Insights</span>
+            <span className="text-sm font-medium text-foreground">Smart Scheduling Insights</span>
           </div>
           {smartSchedule.recommendation && (
             <p className="text-sm text-blue-400 mb-4 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/15">
               {smartSchedule.recommendation}
             </p>
           )}
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div>
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Response Rate by Hour</p>
               <div className="space-y-1.5">
@@ -256,7 +256,7 @@ export default function AnalyticsPage() {
                     <div className="flex-1 h-1.5 bg-secondary rounded-full overflow-hidden">
                       <div className="h-full bg-blue-500 rounded-full" style={{ width: `${Math.min(h.rate, 100)}%` }} />
                     </div>
-                    <span className="text-[11px] text-white tabular-nums w-12 text-right">{h.rate.toFixed(0)}%</span>
+                    <span className="text-[11px] text-foreground tabular-nums w-12 text-right">{h.rate.toFixed(0)}%</span>
                     <span className="text-[10px] text-muted-foreground w-8">({h.sent})</span>
                   </div>
                 ))}
@@ -271,14 +271,14 @@ export default function AnalyticsPage() {
                     <div className="flex-1 h-1.5 bg-secondary rounded-full overflow-hidden">
                       <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${Math.min(d.rate, 100)}%` }} />
                     </div>
-                    <span className="text-[11px] text-white tabular-nums w-12 text-right">{d.rate.toFixed(0)}%</span>
+                    <span className="text-[11px] text-foreground tabular-nums w-12 text-right">{d.rate.toFixed(0)}%</span>
                     <span className="text-[10px] text-muted-foreground w-8">({d.sent})</span>
                   </div>
                 ))}
               </div>
               {smartSchedule.avgResponseHours && (
                 <p className="text-xs text-muted-foreground mt-4">
-                  Avg response time: <span className="text-white font-medium">{smartSchedule.avgResponseHours}h</span>
+                  Avg response time: <span className="text-foreground font-medium">{smartSchedule.avgResponseHours}h</span>
                 </p>
               )}
             </div>

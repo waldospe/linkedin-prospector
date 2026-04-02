@@ -431,19 +431,19 @@ export default function ContactsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-white tracking-tight">Contacts</h1>
+          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Contacts</h1>
           <p className="text-sm text-muted-foreground mt-1">{totalContacts} prospects in your pipeline</p>
         </div>
         <div className="flex gap-2">
           <a
             href={`/api/contacts/export${apiQuery}`}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-white hover:border-border/80 hover:bg-secondary/50 transition-all"
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:border-border/80 hover:bg-secondary/50 transition-all"
           >
             Export
           </a>
           <button
             onClick={() => { resetImport(); setShowImport(true); }}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-white hover:border-border/80 hover:bg-secondary/50 transition-all"
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:border-border/80 hover:bg-secondary/50 transition-all"
           >
             <Upload size={15} />
             Import
@@ -455,7 +455,7 @@ export default function ContactsPage() {
                 Add Contact
               </span>
             </DialogTrigger>
-            <DialogContent className="glass border-border/50 text-white sm:rounded-2xl">
+            <DialogContent className="glass border-border/50 text-foreground sm:rounded-2xl">
               <DialogHeader>
                 <DialogTitle className="text-lg font-semibold">Add Contact</DialogTitle>
               </DialogHeader>
@@ -464,7 +464,7 @@ export default function ContactsPage() {
                   <label className="text-xs font-medium text-muted-foreground mb-1.5 block">LinkedIn URL</label>
                   <div className="flex gap-2">
                     <Input placeholder="https://linkedin.com/in/..." value={newContact.linkedin_url} onChange={(e) => setNewContact({ ...newContact, linkedin_url: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); lookupLinkedIn(newContact.linkedin_url); } }} className="bg-background/50 border-border h-10 flex-1" />
-                    <button onClick={() => lookupLinkedIn(newContact.linkedin_url)} disabled={lookingUp || !newContact.linkedin_url} className="px-3 h-10 rounded-lg bg-secondary border border-border text-xs font-medium text-muted-foreground hover:text-white hover:bg-accent disabled:opacity-40 transition-all shrink-0">
+                    <button onClick={() => lookupLinkedIn(newContact.linkedin_url)} disabled={lookingUp || !newContact.linkedin_url} className="px-3 h-10 rounded-lg bg-secondary border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent disabled:opacity-40 transition-all shrink-0">
                       {lookingUp ? <div className="w-4 h-4 border-2 border-muted-foreground/30 border-t-white rounded-full animate-spin" /> : 'Lookup'}
                     </button>
                   </div>
@@ -480,7 +480,7 @@ export default function ContactsPage() {
                 {sequencesList.length > 0 && (
                   <div>
                     <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Add to Sequence (optional)</label>
-                    <select value={newContact.sequence_id} onChange={(e) => setNewContact({ ...newContact, sequence_id: e.target.value })} className="w-full h-10 bg-background/50 text-white text-sm rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50">
+                    <select value={newContact.sequence_id} onChange={(e) => setNewContact({ ...newContact, sequence_id: e.target.value })} className="w-full h-10 bg-background/50 text-foreground text-sm rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50">
                       <option value="">None</option>
                       {sequencesList.map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}
                     </select>
@@ -497,20 +497,20 @@ export default function ContactsPage() {
       <div className="flex items-center gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <input placeholder="Search contacts..." value={searchInput} onChange={(e) => setSearchInput(e.target.value)} className="w-full h-9 rounded-lg border border-border bg-card/50 text-white pl-10 pr-4 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-blue-500/50 transition-all" />
+          <input placeholder="Search contacts..." value={searchInput} onChange={(e) => setSearchInput(e.target.value)} className="w-full h-9 rounded-lg border border-border bg-card/50 text-foreground pl-10 pr-4 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-blue-500/50 transition-all" />
         </div>
-        <select value={filterStatus} onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }} className="h-9 bg-card/50 text-white text-xs rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50">
+        <select value={filterStatus} onChange={(e) => { setFilterStatus(e.target.value); setPage(1); }} className="h-9 bg-card/50 text-foreground text-xs rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50">
           <option value="all">All Stages</option>
           {FUNNEL_STAGES.map(s => (<option key={s.key} value={s.key}>{s.label}</option>))}
         </select>
         {sources.length > 1 && (
-          <select value={filterSource} onChange={(e) => setFilterSource(e.target.value)} className="h-9 bg-card/50 text-white text-xs rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50">
+          <select value={filterSource} onChange={(e) => setFilterSource(e.target.value)} className="h-9 bg-card/50 text-foreground text-xs rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50">
             <option value="all">All Sources</option>
             {sources.map(s => (<option key={s} value={s}>{s}</option>))}
           </select>
         )}
         {(filterStatus !== 'all' || filterSource !== 'all') && (
-          <button onClick={() => { setFilterStatus('all'); setFilterSource('all'); }} className="text-xs text-muted-foreground hover:text-white transition-colors">
+          <button onClick={() => { setFilterStatus('all'); setFilterSource('all'); }} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
             Clear
           </button>
         )}
@@ -525,7 +525,7 @@ export default function ContactsPage() {
           {sequencesList.length > 0 && (
             <div className="flex items-center gap-2">
               <GitBranch size={14} className="text-muted-foreground" />
-              <select value={bulkSequenceId} onChange={(e) => setBulkSequenceId(e.target.value)} className="h-8 bg-background/50 text-white text-xs rounded-lg px-2 border border-border focus:outline-none focus:border-blue-500/50">
+              <select value={bulkSequenceId} onChange={(e) => setBulkSequenceId(e.target.value)} className="h-8 bg-background/50 text-foreground text-xs rounded-lg px-2 border border-border focus:outline-none focus:border-blue-500/50">
                 <option value="">Select sequence...</option>
                 {sequencesList.map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}
               </select>
@@ -539,7 +539,7 @@ export default function ContactsPage() {
             <Trash2 size={12} />
             Delete
           </button>
-          <button onClick={() => setSelectedIds(new Set())} className="ml-auto text-xs text-muted-foreground hover:text-white transition-colors">
+          <button onClick={() => setSelectedIds(new Set())} className="ml-auto text-xs text-muted-foreground hover:text-foreground transition-colors">
             Deselect all
           </button>
         </div>
@@ -572,7 +572,7 @@ export default function ContactsPage() {
                   <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(contact.id)} className="w-4 h-4 rounded border-border bg-background accent-blue-600 cursor-pointer shrink-0" />
                   <button onClick={() => setDetailContactId(contact.id)} className="shrink-0 hover:opacity-80 transition-opacity">
                     {contact.avatar_url && contact.avatar_url !== 'none' ? (
-                      <img src={contact.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover border border-[hsl(230,10%,18%)]" />
+                      <img src={contact.avatar_url} alt="" className="w-8 h-8 rounded-full object-cover border border-border" />
                     ) : (
                       <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500/15 to-indigo-500/15 border border-blue-500/10 flex items-center justify-center text-xs font-semibold text-blue-300">
                         {(contact.first_name || contact.name || '?').charAt(0)}
@@ -581,7 +581,7 @@ export default function ContactsPage() {
                   </button>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <button onClick={() => setDetailContactId(contact.id)} className="text-sm font-medium text-white truncate hover:text-blue-400 transition-colors text-left">
+                      <button onClick={() => setDetailContactId(contact.id)} className="text-sm font-medium text-foreground truncate hover:text-blue-400 transition-colors text-left">
                         {displayName(contact)}
                       </button>
                       {contact.linkedin_url && (
@@ -602,7 +602,7 @@ export default function ContactsPage() {
                         {contact.sequence_name}
                       </span>
                     ) : sequencesList.length > 0 && !['opted_out'].includes(contact.status) ? (
-                      <select defaultValue="" onChange={(e) => { if (e.target.value) assignSequence(contact.id, parseInt(e.target.value)); }} className="h-7 bg-secondary/50 text-white text-[11px] rounded-lg px-1.5 border border-border focus:outline-none focus:border-blue-500/50 cursor-pointer">
+                      <select defaultValue="" onChange={(e) => { if (e.target.value) assignSequence(contact.id, parseInt(e.target.value)); }} className="h-7 bg-secondary/50 text-foreground text-[11px] rounded-lg px-1.5 border border-border focus:outline-none focus:border-blue-500/50 cursor-pointer">
                         <option value="">+ Seq</option>
                         {sequencesList.map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}
                       </select>
@@ -617,7 +617,7 @@ export default function ContactsPage() {
                         <Ban size={12} />
                       </button>
                     )}
-                    <button onClick={() => isEditing ? setEditingContact(null) : startEditContact(contact)} className="p-1 rounded-md text-muted-foreground hover:text-white hover:bg-secondary transition-all" title="Edit">
+                    <button onClick={() => isEditing ? setEditingContact(null) : startEditContact(contact)} className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-all" title="Edit">
                       <Edit2 size={12} />
                     </button>
                     <button onClick={() => deleteContact(contact.id)} className="p-1 rounded-md text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-all" title="Delete">
@@ -627,16 +627,16 @@ export default function ContactsPage() {
                 </div>
                 {/* Inline edit */}
                 {isEditing && (
-                  <div className="mt-3 ml-14 grid grid-cols-5 gap-2 animate-slide-up">
-                    <input value={editData.first_name || ''} onChange={(e) => setEditData({ ...editData, first_name: e.target.value })} placeholder="First name" className="bg-background/50 border border-border rounded-lg px-2 h-8 text-xs text-white" />
-                    <input value={editData.last_name || ''} onChange={(e) => setEditData({ ...editData, last_name: e.target.value })} placeholder="Last name" className="bg-background/50 border border-border rounded-lg px-2 h-8 text-xs text-white" />
-                    <input value={editData.company || ''} onChange={(e) => setEditData({ ...editData, company: e.target.value })} placeholder="Company" className="bg-background/50 border border-border rounded-lg px-2 h-8 text-xs text-white" />
-                    <input value={editData.title || ''} onChange={(e) => setEditData({ ...editData, title: e.target.value })} placeholder="Title" className="bg-background/50 border border-border rounded-lg px-2 h-8 text-xs text-white" />
+                  <div className="mt-3 ml-14 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 animate-slide-up">
+                    <input value={editData.first_name || ''} onChange={(e) => setEditData({ ...editData, first_name: e.target.value })} placeholder="First name" className="bg-background/50 border border-border rounded-lg px-2 h-8 text-xs text-foreground" />
+                    <input value={editData.last_name || ''} onChange={(e) => setEditData({ ...editData, last_name: e.target.value })} placeholder="Last name" className="bg-background/50 border border-border rounded-lg px-2 h-8 text-xs text-foreground" />
+                    <input value={editData.company || ''} onChange={(e) => setEditData({ ...editData, company: e.target.value })} placeholder="Company" className="bg-background/50 border border-border rounded-lg px-2 h-8 text-xs text-foreground" />
+                    <input value={editData.title || ''} onChange={(e) => setEditData({ ...editData, title: e.target.value })} placeholder="Title" className="bg-background/50 border border-border rounded-lg px-2 h-8 text-xs text-foreground" />
                     <div className="flex gap-1">
                       <button onClick={saveEditContact} className="flex-1 h-8 rounded-lg bg-blue-600 text-white text-xs hover:bg-blue-500 transition-all flex items-center justify-center">
                         <Save size={12} />
                       </button>
-                      <button onClick={() => setEditingContact(null)} className="h-8 px-2 rounded-lg text-xs text-muted-foreground hover:text-white hover:bg-secondary transition-all">
+                      <button onClick={() => setEditingContact(null)} className="h-8 px-2 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-all">
                         Cancel
                       </button>
                     </div>
@@ -655,11 +655,11 @@ export default function ContactsPage() {
             Showing {(page - 1) * pageSize + 1}-{Math.min(page * pageSize, totalContacts)} of {totalContacts}
           </span>
           <div className="flex items-center gap-2">
-            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-border text-muted-foreground hover:text-white hover:bg-secondary disabled:opacity-30 transition-all">
+            <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-30 transition-all">
               Previous
             </button>
-            <span className="text-xs text-white tabular-nums">Page {page} of {Math.ceil(totalContacts / pageSize)}</span>
-            <button onClick={() => setPage(p => p + 1)} disabled={page >= Math.ceil(totalContacts / pageSize)} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-border text-muted-foreground hover:text-white hover:bg-secondary disabled:opacity-30 transition-all">
+            <span className="text-xs text-foreground tabular-nums">Page {page} of {Math.ceil(totalContacts / pageSize)}</span>
+            <button onClick={() => setPage(p => p + 1)} disabled={page >= Math.ceil(totalContacts / pageSize)} className="px-3 py-1.5 rounded-lg text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-30 transition-all">
               Next
             </button>
           </div>
@@ -668,19 +668,19 @@ export default function ContactsPage() {
 
       {/* Delete Confirmation */}
       <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
-        <DialogContent className="glass border-border/50 text-white sm:rounded-2xl sm:max-w-sm">
+        <DialogContent className="glass border-border/50 text-foreground sm:rounded-2xl sm:max-w-sm">
           <div className="text-center py-2">
             <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center mx-auto mb-4">
               <AlertTriangle size={24} className="text-red-400" />
             </div>
-            <h3 className="text-lg font-semibold text-white">Delete {selectedIds.size} contacts?</h3>
+            <h3 className="text-lg font-semibold text-foreground">Delete {selectedIds.size} contacts?</h3>
             <p className="text-sm text-muted-foreground mt-2">
               This will permanently delete the selected contacts and remove them from any active sequences. This cannot be undone.
             </p>
             <div className="flex gap-3 mt-6">
               <button
                 onClick={() => setShowDeleteConfirm(false)}
-                className="flex-1 h-10 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-white hover:bg-secondary transition-all"
+                className="flex-1 h-10 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-all"
               >
                 Cancel
               </button>
@@ -697,7 +697,7 @@ export default function ContactsPage() {
 
       {/* Import Dialog */}
       <Dialog open={showImport} onOpenChange={(open) => { if (!open) { setShowImport(false); resetImport(); } }}>
-        <DialogContent className="glass border-border/50 text-white sm:rounded-2xl sm:max-w-2xl">
+        <DialogContent className="glass border-border/50 text-foreground sm:rounded-2xl sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle className="text-lg font-semibold">
               {importState.step === 'choose' && 'Import Contacts'}
@@ -720,15 +720,15 @@ export default function ContactsPage() {
             <div className="space-y-3 mt-2">
               <button onClick={() => setImportState(s => ({ ...s, step: 'csv-upload' }))} className="w-full flex items-center gap-4 p-4 rounded-xl bg-secondary/50 border border-border hover:bg-secondary hover:border-border/80 transition-all text-left">
                 <div className="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/15 flex items-center justify-center shrink-0"><FileSpreadsheet size={18} className="text-emerald-400" /></div>
-                <div><p className="text-sm font-medium text-white">CSV File</p><p className="text-xs text-muted-foreground mt-0.5">Upload a .csv file</p></div>
+                <div><p className="text-sm font-medium text-foreground">CSV File</p><p className="text-xs text-muted-foreground mt-0.5">Upload a .csv file</p></div>
               </button>
               <button onClick={() => setImportState(s => ({ ...s, step: 'sheets-url' }))} className="w-full flex items-center gap-4 p-4 rounded-xl bg-secondary/50 border border-border hover:bg-secondary hover:border-border/80 transition-all text-left">
                 <div className="w-10 h-10 rounded-lg bg-blue-500/10 border border-blue-500/15 flex items-center justify-center shrink-0"><Link2 size={18} className="text-blue-400" /></div>
-                <div><p className="text-sm font-medium text-white">Google Sheets</p><p className="text-xs text-muted-foreground mt-0.5">Paste a public link</p></div>
+                <div><p className="text-sm font-medium text-foreground">Google Sheets</p><p className="text-xs text-muted-foreground mt-0.5">Paste a public link</p></div>
               </button>
               <button onClick={importFromPipedrive} disabled={importing} className="w-full flex items-center gap-4 p-4 rounded-xl bg-secondary/50 border border-border hover:bg-secondary hover:border-border/80 transition-all text-left disabled:opacity-50">
                 <div className="w-10 h-10 rounded-lg bg-violet-500/10 border border-violet-500/15 flex items-center justify-center shrink-0"><Upload size={18} className="text-violet-400" /></div>
-                <div><p className="text-sm font-medium text-white">{importing ? 'Importing...' : 'Pipedrive'}</p><p className="text-xs text-muted-foreground mt-0.5">Sync from CRM</p></div>
+                <div><p className="text-sm font-medium text-foreground">{importing ? 'Importing...' : 'Pipedrive'}</p><p className="text-xs text-muted-foreground mt-0.5">Sync from CRM</p></div>
               </button>
             </div>
           )}
@@ -738,11 +738,11 @@ export default function ContactsPage() {
               <label className="block w-full cursor-pointer">
                 <div className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-blue-500/30 transition-all">
                   <FileSpreadsheet className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-white font-medium">Click to select a CSV file</p>
+                  <p className="text-sm text-foreground font-medium">Click to select a CSV file</p>
                 </div>
                 <input type="file" accept=".csv" onChange={handleCsvFile} className="hidden" />
               </label>
-              <button onClick={() => setImportState(s => ({ ...s, step: 'choose' }))} className="text-sm text-muted-foreground hover:text-white transition-colors">Back</button>
+              <button onClick={() => setImportState(s => ({ ...s, step: 'choose' }))} className="text-sm text-muted-foreground hover:text-foreground transition-colors">Back</button>
             </div>
           )}
 
@@ -754,14 +754,14 @@ export default function ContactsPage() {
                 <p className="text-xs text-muted-foreground mt-1.5">Sheet must be publicly accessible</p>
               </div>
               <button onClick={handleSheetsImport} disabled={!sheetsUrl} className="w-full h-10 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 disabled:opacity-40 transition-all">Fetch Sheet</button>
-              <button onClick={() => setImportState(s => ({ ...s, step: 'choose', error: '' }))} className="text-sm text-muted-foreground hover:text-white transition-colors">Back</button>
+              <button onClick={() => setImportState(s => ({ ...s, step: 'choose', error: '' }))} className="text-sm text-muted-foreground hover:text-foreground transition-colors">Back</button>
             </div>
           )}
 
           {importState.step === 'mapping' && (
             <div className="space-y-4 mt-2">
               <p className="text-sm text-muted-foreground">
-                <span className="text-white font-medium">{importState.rows.length}</span> rows, <span className="text-white font-medium">{importState.headers.length}</span> columns. Map to contact fields:
+                <span className="text-foreground font-medium">{importState.rows.length}</span> rows, <span className="text-foreground font-medium">{importState.headers.length}</span> columns. Map to contact fields:
               </p>
               <div className="space-y-2 max-h-[250px] overflow-auto">
                 {importState.headers.map((header) => {
@@ -773,9 +773,9 @@ export default function ContactsPage() {
                   );
                   return (
                     <div key={header} className="flex items-center gap-3 p-3 rounded-lg bg-secondary/50 border border-border/50">
-                      <span className="text-sm text-white font-medium w-40 truncate shrink-0" title={header}>{header}</span>
+                      <span className="text-sm text-foreground font-medium w-40 truncate shrink-0" title={header}>{header}</span>
                       <ArrowRight size={14} className="text-muted-foreground shrink-0" />
-                      <select value={importState.mapping[header] || ''} onChange={(e) => setImportState(s => ({ ...s, mapping: { ...s.mapping, [header]: e.target.value } }))} className="flex-1 h-8 bg-background/50 text-white text-sm rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50">
+                      <select value={importState.mapping[header] || ''} onChange={(e) => setImportState(s => ({ ...s, mapping: { ...s.mapping, [header]: e.target.value } }))} className="flex-1 h-8 bg-background/50 text-foreground text-sm rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50">
                         <option value="">Skip</option>
                         {importState.validFields.map(f => (
                           <option key={f} value={f} disabled={usedByOthers.has(f)}>
@@ -800,7 +800,7 @@ export default function ContactsPage() {
               {sequencesList.length > 0 && (
                 <div>
                   <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Add to Sequence after import (optional)</label>
-                  <select value={importState.sequenceId} onChange={(e) => setImportState(s => ({ ...s, sequenceId: e.target.value }))} className="w-full h-9 bg-background/50 text-white text-sm rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50">
+                  <select value={importState.sequenceId} onChange={(e) => setImportState(s => ({ ...s, sequenceId: e.target.value }))} className="w-full h-9 bg-background/50 text-foreground text-sm rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50">
                     <option value="">None — import only</option>
                     {sequencesList.map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}
                   </select>
@@ -810,7 +810,7 @@ export default function ContactsPage() {
                 <button onClick={executeImport} disabled={!hasNameMapping} className="flex-1 h-10 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 disabled:opacity-40 transition-all">
                   Import {importState.rows.length} Contacts
                 </button>
-                <button onClick={resetImport} className="px-4 h-10 rounded-lg text-sm text-muted-foreground hover:text-white hover:bg-secondary transition-all">Back</button>
+                <button onClick={resetImport} className="px-4 h-10 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-all">Back</button>
               </div>
             </div>
           )}
@@ -825,7 +825,7 @@ export default function ContactsPage() {
           {importState.step === 'done' && importState.result && (
             <div className="py-6 text-center">
               <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto mb-3" />
-              <p className="text-white font-medium">Imported {importState.result.imported} of {importState.result.total} contacts</p>
+              <p className="text-foreground font-medium">Imported {importState.result.imported} of {importState.result.total} contacts</p>
               <div className="text-sm text-muted-foreground mt-2 space-y-0.5">
                 {(importState.result as any).duplicates > 0 && <p>{(importState.result as any).duplicates} duplicates skipped</p>}
                 {(importState.result as any).invalidUrls > 0 && <p>{(importState.result as any).invalidUrls} invalid LinkedIn URLs</p>}

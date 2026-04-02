@@ -5,6 +5,15 @@ import path from 'path';
 
 const dbPath = process.env.DATABASE_PATH || path.join(process.cwd(), 'data', 'app.db');
 
+function getTodayInTimezone(timezone?: string): string {
+  if (!timezone) return new Date().toISOString().split('T')[0];
+  try {
+    return new Date().toLocaleDateString('en-CA', { timeZone: timezone }); // en-CA gives YYYY-MM-DD
+  } catch {
+    return new Date().toISOString().split('T')[0];
+  }
+}
+
 let db: Database.Database | null = null;
 
 export function getDb(): Database.Database {
@@ -654,7 +663,7 @@ export const queue = {
       JOIN contacts c ON q.contact_id = c.id
       LEFT JOIN sequences s ON q.sequence_id = s.id
       WHERE q.user_id = ? AND q.status = 'pending'
-      ORDER BY q.scheduled_at
+      ORDER BY CASE q.action_type WHEN 'message' THEN 0 ELSE 1 END, q.scheduled_at
     `).all(userId);
   },
   create: (userId: number, data: { contact_id: number; sequence_id?: number; step_number?: number; action_type: string; message_text?: string; scheduled_at?: string; template_variant?: string }) => {
@@ -791,8 +800,8 @@ export const stats = {
       GROUP BY date ORDER BY date DESC
     `).all(...(teamId ? [teamId, days] : [days]));
   },
-  getToday: (userId: number) => {
-    const today = new Date().toISOString().split('T')[0];
+  getToday: (userId: number, timezone?: string) => {
+    const today = getTodayInTimezone(timezone);
     const row = getDb().prepare('SELECT * FROM daily_stats WHERE date = ? AND user_id = ?').get(today, userId) as any;
     if (!row) {
       getDb().prepare('INSERT OR IGNORE INTO daily_stats (date, user_id) VALUES (?, ?)').run(today, userId);
@@ -800,8 +809,8 @@ export const stats = {
     }
     return row;
   },
-  getTodayTeam: (teamId?: number) => {
-    const today = new Date().toISOString().split('T')[0];
+  getTodayTeam: (teamId?: number, timezone?: string) => {
+    const today = getTodayInTimezone(timezone);
     const row = getDb().prepare(`
       SELECT ? as date, COALESCE(SUM(connections_sent),0) as connections_sent, COALESCE(SUM(messages_sent),0) as messages_sent, COALESCE(SUM(replies_received),0) as replies_received
       FROM daily_stats ds JOIN users u ON ds.user_id = u.id
@@ -809,8 +818,8 @@ export const stats = {
     `).get(...(teamId ? [today, today, teamId] : [today, today])) as any;
     return row || { date: today, connections_sent: 0, messages_sent: 0, replies_received: 0 };
   },
-  increment: (field: 'connections_sent' | 'messages_sent' | 'replies_received', userId: number) => {
-    const today = new Date().toISOString().split('T')[0];
+  increment: (field: 'connections_sent' | 'messages_sent' | 'replies_received', userId: number, timezone?: string) => {
+    const today = getTodayInTimezone(timezone);
     getDb().prepare('INSERT OR IGNORE INTO daily_stats (date, user_id) VALUES (?, ?)').run(today, userId);
     getDb().prepare(`UPDATE daily_stats SET ${field} = ${field} + 1 WHERE date = ? AND user_id = ?`).run(today, userId);
   },

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { queue, contacts, stats, users, globalConfig, templates, messages, sequences } from '@/lib/db';
+import { queue, contacts, stats, users, globalConfig, templates, messages, sequences, getDb } from '@/lib/db';
 import { substituteVariables } from '@/lib/constants';
 import { sendAlertEmail } from '@/lib/email';
 
@@ -46,14 +46,6 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      // Check daily limit
-      const today = stats.getToday(user.id);
-      const dailyUsed = today.connections_sent + today.messages_sent;
-      if (dailyUsed >= user.daily_limit) {
-        if (monitored > 0) results.push({ user: user.name, processed: 0, errors: [], monitored });
-        continue;
-      }
-
       // Get pending items (only those scheduled for now or earlier)
       const pending = queue.getPending(user.id) as any[];
       const ready = pending.filter(item => {
@@ -66,24 +58,70 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      const remaining = user.daily_limit - dailyUsed;
-      // Only process 1-2 ACTUAL sends per cycle (every 2 min = ~30-60 sends per 9hr window)
-      // Allow extra buffer for skips since those don't hit the API
-      const maxSendsPerCycle = 2;
-      const batch = ready.slice(0, Math.min(maxSendsPerCycle + 5, remaining + 5)); // buffer for skips
-      const processed: number[] = []; // actual sends (count toward daily limit)
-      const skipped: number[] = []; // already connected — don't count
+      // Split into messages (unlimited, process all) and connections (daily-limited, spaced)
+      const readyMessages = ready.filter(item => item.action_type === 'message');
+      const readyConnections = ready.filter(item => item.action_type === 'connection');
+
+      // Daily limit only applies to connections
+      const today = stats.getToday(user.id, user.timezone);
+      const connectionsRemaining = user.daily_limit - today.connections_sent;
+
+      // Connection spacing: spread evenly across the send window
+      const db = getDb();
+      let connectionAllowed = connectionsRemaining > 0;
+      if (connectionAllowed && readyConnections.length > 0) {
+        const schedule = user.send_schedule || {};
+        const tz = user.timezone || 'America/Los_Angeles';
+        const nowLocal = new Date(new Date().toLocaleString('en-US', { timeZone: tz }));
+        const daysArr = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+        const daySchedule = schedule[daysArr[nowLocal.getDay()]] || { start: '08:00', end: '17:00' };
+        const [sH, sM] = (daySchedule.start || '08:00').split(':').map(Number);
+        const [eH, eM] = (daySchedule.end || '17:00').split(':').map(Number);
+        const windowMinutes = (eH * 60 + eM) - (sH * 60 + sM);
+        const baseGapMinutes = connectionsRemaining > 0 ? Math.floor(windowMinutes / connectionsRemaining) : 30;
+        const minGapMinutes = Math.max(5, Math.floor(baseGapMinutes * 0.7));
+
+        const lastConnection = db.prepare(
+          "SELECT executed_at FROM queue WHERE user_id = ? AND action_type = 'connection' AND status = 'completed' AND executed_at IS NOT NULL ORDER BY executed_at DESC LIMIT 1"
+        ).get(user.id) as any;
+
+        if (lastConnection?.executed_at) {
+          const lastTime = new Date(lastConnection.executed_at + (lastConnection.executed_at.includes('Z') ? '' : 'Z'));
+          const minutesSince = (Date.now() - lastTime.getTime()) / 60000;
+          if (minutesSince < minGapMinutes) {
+            connectionAllowed = false;
+          }
+        }
+      }
+
+      // Build batch: up to 2 messages per cycle (every 2 min = plenty of throughput)
+      // + at most 1 connection (if allowed)
+      const batch = [
+        ...readyMessages.slice(0, 2),
+        ...(connectionAllowed ? readyConnections.slice(0, 6) : []), // buffer for skips
+      ];
+
+      if (batch.length === 0) {
+        if (monitored > 0) results.push({ user: user.name, processed: 0, errors: [], monitored });
+        continue;
+      }
+
+      const processed: number[] = [];
+      const skipped: number[] = [];
       const errors: string[] = [];
+      let connectionsSentThisCycle = 0;
 
       for (const item of batch) {
-        // Stop if we've hit the per-cycle or daily limit with actual sends
-        if (processed.length >= maxSendsPerCycle || processed.length >= remaining) break;
+        // Connections: max 1 per cycle, respect daily limit
+        if (item.action_type === 'connection') {
+          if (connectionsSentThisCycle >= 1 || (today.connections_sent + connectionsSentThisCycle) >= user.daily_limit) continue;
+        }
 
         try {
           // Verify this queue item's contact belongs to this user
           const ownedContact = contacts.getById(item.contact_id, user.id);
           if (!ownedContact) {
-            console.log(`SKIP ${item.contact_name} — contact not owned by ${user.name}`);
+            // Skip: ${item.contact_name} — contact not owned by ${user.name}`);
             queue.updateStatus(item.id, 'failed', user.id, 'Contact belongs to another user');
             continue;
           }
@@ -94,14 +132,14 @@ export async function POST(req: NextRequest) {
             const contactStatus = (contacts.getById(item.contact_id, user.id) as any)?.status;
             if (contactStatus === 'invite_sent' || contactStatus === 'invite_pending') {
               // Already have a pending invite — skip, don't count
-              console.log(`SKIP ${item.contact_name} — invite already pending (${contactStatus})`);
+              // Skip: ${item.contact_name} — invite already pending (${contactStatus})`);
               queue.updateStatus(item.id, 'completed', user.id);
               skipped.push(item.id);
               continue;
             }
             if (contactStatus === 'connected' || contactStatus === 'msg_sent' || contactStatus === 'replied' || contactStatus === 'engaged') {
               // Already connected — skip entire connection sequence
-              console.log(`SKIP ${item.contact_name} — already ${contactStatus}`);
+              // Skip: ${item.contact_name} — already ${contactStatus}`);
               queue.updateStatus(item.id, 'completed', user.id);
               skipped.push(item.id);
               continue;
@@ -164,7 +202,7 @@ export async function POST(req: NextRequest) {
           if (item.action_type === 'connection') {
             // Skip connection request if already connected — does NOT count toward daily limit
             if (alreadyConnected) {
-              console.log(`SKIP invite for ${item.contact_name} — already connected`);
+              // Skip: already connected
               queue.updateStatus(item.id, 'completed', user.id);
               contacts.updateStatus(item.contact_id, 'connected', user.id);
               // Do NOT queue follow-up messages from connection sequences for already-connected contacts.
@@ -193,7 +231,8 @@ export async function POST(req: NextRequest) {
 
             queue.updateStatus(item.id, 'completed', user.id);
             contacts.updateStatus(item.contact_id, 'invite_sent', user.id);
-            stats.increment('connections_sent', user.id);
+            stats.increment('connections_sent', user.id, user.timezone);
+            connectionsSentThisCycle++;
 
           } else if (item.action_type === 'message') {
             if (!alreadyConnected) {
@@ -221,7 +260,7 @@ export async function POST(req: NextRequest) {
 
             queue.updateStatus(item.id, 'completed', user.id);
             contacts.updateStatus(item.contact_id, 'msg_sent', user.id);
-            stats.increment('messages_sent', user.id);
+            stats.increment('messages_sent', user.id, user.timezone);
 
             if (messageText) {
               messages.create(user.id, { contact_id: item.contact_id, content: messageText });
@@ -313,22 +352,28 @@ async function monitorContacts(user: any, cfg: any, baseUrl: string): Promise<nu
           const steps = typeof lastItem.sequence_steps === 'string' ? JSON.parse(lastItem.sequence_steps) : lastItem.sequence_steps;
           const nextStepIdx = lastItem.step_number; // 0-indexed next
           if (nextStepIdx < steps.length) {
-            const nextStep = steps[nextStepIdx];
-            const contactData = {
-              first_name: contact.first_name, last_name: contact.last_name,
-              name: contact.name, company: contact.company, title: contact.title,
-            };
-            const nextMessage = nextStep.template
-              ? substituteVariables(nextStep.template, contactData)
-              : '';
-            queue.create(user.id, {
-              contact_id: contact.id,
-              sequence_id: lastItem.sequence_id,
-              step_number: lastItem.step_number + 1,
-              action_type: nextStep.action,
-              message_text: nextMessage,
-              scheduled_at: new Date(Date.now() + (nextStep.delay_hours || 0) * 3600000).toISOString(),
-            });
+            // Dedup: don't create a follow-up if one already exists for this contact + step
+            const existingNext = getDb().prepare(
+              "SELECT id FROM queue WHERE user_id = ? AND contact_id = ? AND step_number = ? AND status = 'pending'"
+            ).get(user.id, contact.id, lastItem.step_number + 1);
+            if (!existingNext) {
+              const nextStep = steps[nextStepIdx];
+              const contactData = {
+                first_name: contact.first_name, last_name: contact.last_name,
+                name: contact.name, company: contact.company, title: contact.title,
+              };
+              const nextMessage = nextStep.template
+                ? substituteVariables(nextStep.template, contactData)
+                : '';
+              queue.create(user.id, {
+                contact_id: contact.id,
+                sequence_id: lastItem.sequence_id,
+                step_number: lastItem.step_number + 1,
+                action_type: nextStep.action,
+                message_text: nextMessage,
+                scheduled_at: new Date(Date.now() + (nextStep.delay_hours || 0) * 3600000).toISOString(),
+              });
+            }
           }
         }
       } else {
@@ -379,7 +424,7 @@ async function monitorContacts(user: any, cfg: any, baseUrl: string): Promise<nu
         // If the last message is from the other person (not us), they replied
         if (chat.last_message && chat.last_message.sender_id === providerId) {
           contacts.updateStatus(contact.id, 'replied', user.id);
-          stats.increment('replies_received', user.id);
+          stats.increment('replies_received', user.id, user.timezone);
           messages.markReplied(contact.id, user.id);
           updated++;
         }

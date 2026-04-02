@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getEffectiveUser } from '@/lib/api-auth';
-import { contacts, sequences, queue, users } from '@/lib/db';
+import { contacts, sequences, queue, users, activityLog } from '@/lib/db';
 import { normalizeLinkedInUrl, isValidLinkedInUrl, substituteVariables } from '@/lib/constants';
 
 // Allow large request bodies for CSV imports (up to 10MB)
@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
   try {
     const { effectiveUserId, userId: authUserId } = getEffectiveUser(req);
     const userId = effectiveUserId || authUserId;
-    console.log('IMPORT: userId =', userId, 'effectiveUserId =', effectiveUserId);
+    // Import started
     const body = await req.json();
 
     // Step 1: Header validation - return suggested mapping
@@ -209,6 +209,7 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      activityLog.log(userId!, 'import_csv', 'contact', undefined, `Imported ${count} of ${rows.length} contacts${sequenced ? `, ${sequenced} sequenced` : ''}`);
       return NextResponse.json({ imported: count, total: rows.length, invalidUrls, duplicates, sequenced });
     }
 

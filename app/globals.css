@@ -6,6 +6,30 @@
 
 @layer base {
   :root {
+    --background: 220 20% 97%;
+    --foreground: 224 20% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 224 20% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 224 20% 12%;
+    --primary: 220 90% 50%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 14% 92%;
+    --secondary-foreground: 224 20% 30%;
+    --muted: 220 14% 92%;
+    --muted-foreground: 220 10% 46%;
+    --accent: 220 14% 94%;
+    --accent-foreground: 224 20% 12%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 13% 88%;
+    --input: 220 13% 88%;
+    --ring: 220 90% 50%;
+    --radius: 0.75rem;
+    --sidebar: 220 20% 95%;
+  }
+
+  .dark {
     --background: 230 15% 5.5%;
     --foreground: 210 40% 96%;
     --card: 230 14% 8%;
@@ -47,6 +71,13 @@
 @layer utilities {
   /* Premium glass card */
   .glass {
+    background: linear-gradient(145deg, hsl(0 0% 100%), hsl(220 20% 98%));
+    border: 1px solid hsl(220 13% 88%);
+    box-shadow:
+      0 1px 3px 0 rgb(0 0 0 / 0.06),
+      inset 0 1px 0 0 hsl(0 0% 100% / 0.8);
+  }
+  .dark .glass {
     background: linear-gradient(145deg, hsl(230 14% 9.5%), hsl(230 14% 7.5%));
     border: 1px solid hsl(230 10% 14%);
     box-shadow:
@@ -57,13 +88,52 @@
     transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   }
   .glass-hover:hover {
+    background: linear-gradient(145deg, hsl(220 14% 97%), hsl(220 14% 95%));
+    border-color: hsl(220 10% 82%);
+    box-shadow:
+      0 4px 16px 0 rgb(0 0 0 / 0.08),
+      0 0 0 1px hsl(220 10% 88% / 0.5),
+      inset 0 1px 0 0 hsl(0 0% 100% / 0.8);
+    transform: translateY(-1px);
+  }
+  .dark .glass-hover:hover {
     background: linear-gradient(145deg, hsl(230 14% 11%), hsl(230 14% 9%));
     border-color: hsl(230 10% 18%);
     box-shadow:
       0 4px 16px 0 rgb(0 0 0 / 0.3),
       0 0 0 1px hsl(230 10% 16% / 0.3),
       inset 0 1px 0 0 hsl(230 10% 18% / 0.5);
-    transform: translateY(-1px);
+  }
+
+  /* Glass card (alias for some pages) */
+  .glass-card {
+    background: linear-gradient(145deg, hsl(0 0% 100%), hsl(220 20% 98%));
+    border: 1px solid hsl(220 13% 88%);
+    border-radius: 0.75rem;
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.06);
+  }
+  .dark .glass-card {
+    background: linear-gradient(145deg, hsl(230 14% 9.5%), hsl(230 14% 7.5%));
+    border: 1px solid hsl(230 10% 14%);
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  }
+
+  /* Theme-aware input */
+  .input-field {
+    background: hsl(var(--secondary));
+    border: 1px solid hsl(var(--border));
+    color: hsl(var(--foreground));
+  }
+  .input-field:focus {
+    border-color: hsl(220 90% 56% / 0.4);
+    box-shadow: 0 0 0 1px hsl(220 90% 56% / 0.2);
+    outline: none;
+  }
+
+  /* Theme-aware panel bg */
+  .panel-bg {
+    background: hsl(var(--sidebar));
+    border-color: hsl(var(--border));
   }
 
   /* Glows */
@@ -89,26 +159,50 @@
     background: linear-gradient(135deg, hsl(220 90% 56%), hsl(250 80% 55%));
   }
   .gradient-card-blue {
+    background: linear-gradient(145deg, hsl(220 60% 97%), hsl(0 0% 100%));
+    border-color: hsl(220 40% 90%);
+  }
+  .dark .gradient-card-blue {
     background: linear-gradient(145deg, hsl(220 40% 10%), hsl(230 14% 8%));
     border-color: hsl(220 30% 16%);
   }
   .gradient-card-indigo {
+    background: linear-gradient(145deg, hsl(240 50% 97%), hsl(0 0% 100%));
+    border-color: hsl(240 30% 90%);
+  }
+  .dark .gradient-card-indigo {
     background: linear-gradient(145deg, hsl(240 30% 10%), hsl(230 14% 8%));
     border-color: hsl(240 20% 16%);
   }
   .gradient-card-emerald {
+    background: linear-gradient(145deg, hsl(160 40% 96%), hsl(0 0% 100%));
+    border-color: hsl(160 25% 88%);
+  }
+  .dark .gradient-card-emerald {
     background: linear-gradient(145deg, hsl(160 25% 9%), hsl(230 14% 8%));
     border-color: hsl(160 15% 14%);
   }
   .gradient-card-violet {
+    background: linear-gradient(145deg, hsl(270 40% 97%), hsl(0 0% 100%));
+    border-color: hsl(270 25% 90%);
+  }
+  .dark .gradient-card-violet {
     background: linear-gradient(145deg, hsl(270 25% 10%), hsl(230 14% 8%));
     border-color: hsl(270 15% 15%);
   }
   .gradient-card-amber {
+    background: linear-gradient(145deg, hsl(40 50% 96%), hsl(0 0% 100%));
+    border-color: hsl(40 30% 88%);
+  }
+  .dark .gradient-card-amber {
     background: linear-gradient(145deg, hsl(40 25% 9%), hsl(230 14% 8%));
     border-color: hsl(40 15% 14%);
   }
   .gradient-card-cyan {
+    background: linear-gradient(145deg, hsl(190 40% 96%), hsl(0 0% 100%));
+    border-color: hsl(190 25% 88%);
+  }
+  .dark .gradient-card-cyan {
     background: linear-gradient(145deg, hsl(190 25% 9%), hsl(230 14% 8%));
     border-color: hsl(190 15% 14%);
   }
@@ -157,10 +251,16 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: hsl(230 10% 18%);
+  background: hsl(220 10% 80%);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
+  background: hsl(220 10% 70%);
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: hsl(230 10% 18%);
+}
+.dark ::-webkit-scrollbar-thumb:hover {
   background: hsl(230 10% 25%);
 }
 
@@ -179,6 +279,12 @@
 
 /* Gradient background for main content */
 .main-gradient {
+  background:
+    radial-gradient(ellipse at 20% 0%, hsl(220 60% 95% / 0.5) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 100%, hsl(260 50% 95% / 0.3) 0%, transparent 60%),
+    hsl(var(--background));
+}
+.dark .main-gradient {
   background:
     radial-gradient(ellipse at 20% 0%, hsl(220 40% 8% / 0.5) 0%, transparent 60%),
     radial-gradient(ellipse at 80% 100%, hsl(260 30% 8% / 0.3) 0%, transparent 60%),

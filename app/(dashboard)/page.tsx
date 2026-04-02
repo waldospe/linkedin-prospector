@@ -64,7 +64,7 @@ export default function DashboardPage() {
   const pendingCount = queue.filter(q => q.status === 'pending').length;
   const failedCount = queue.filter(q => q.status === 'failed').length;
   const dailyLimit = currentUser?.daily_limit || 20;
-  const dailyUsed = stats.today.connections_sent + stats.today.messages_sent;
+  const dailyUsed = stats.today.connections_sent;
   const dailyProgress = Math.min((dailyUsed / dailyLimit) * 100, 100);
 
   const totalContacts = funnel.reduce((sum, f) => sum + f.count, 0);
@@ -92,7 +92,7 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-[28px] font-bold text-white tracking-tight leading-tight">
+          <h1 className="text-[28px] font-bold text-foreground tracking-tight leading-tight">
             {isViewingAll ? 'Team Overview' : `Welcome back${viewingUser ? `, ${viewingUser.name}` : ''}`}
           </h1>
           <p className="text-[15px] text-muted-foreground mt-1.5 font-light">
@@ -121,7 +121,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-4 gap-5">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
         {statCards.map(({ label, value, icon: Icon, color, gradient }, idx) => (
           <div key={label} className={`glass ${gradient} rounded-2xl p-5 animate-slide-up`} style={{ animationDelay: `${idx * 60}ms` }}>
             <div className="flex items-center justify-between mb-4">
@@ -130,7 +130,7 @@ export default function DashboardPage() {
                 <Icon size={16} />
               </div>
             </div>
-            <p className="text-[32px] font-bold text-white tabular-nums leading-none animate-count-up">{value}</p>
+            <p className="text-[32px] font-bold text-foreground tabular-nums leading-none animate-count-up">{value}</p>
           </div>
         ))}
       </div>
@@ -140,14 +140,14 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-2.5">
             <TrendingUp size={16} className="text-blue-400" />
-            <span className="text-sm font-semibold text-white">Daily Activity</span>
+            <span className="text-sm font-semibold text-foreground">Daily Connection Limit</span>
           </div>
           <div className="flex items-baseline gap-1">
-            <span className="text-lg font-bold text-white tabular-nums">{dailyUsed}</span>
+            <span className="text-lg font-bold text-foreground tabular-nums">{dailyUsed}</span>
             <span className="text-sm text-muted-foreground">/ {dailyLimit}</span>
           </div>
         </div>
-        <div className="h-2.5 bg-[hsl(230,12%,12%)] rounded-full overflow-hidden">
+        <div className="h-2.5 bg-secondary rounded-full overflow-hidden">
           <div
             className="h-full rounded-full transition-all duration-700 ease-out"
             style={{
@@ -159,17 +159,17 @@ export default function DashboardPage() {
           />
         </div>
         <p className="text-xs text-muted-foreground mt-3 font-medium">
-          {dailyProgress >= 100 ? '🎯 Daily limit reached' : `${Math.round(100 - dailyProgress)}% remaining`}
+          {dailyProgress >= 100 ? '🎯 Connection limit reached — messages still sending' : `${Math.round(100 - dailyProgress)}% remaining`}
         </p>
       </div>
 
       {/* Funnel + Queue */}
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Funnel */}
         <div className="glass rounded-xl p-5">
           <div className="flex items-center gap-2 mb-5">
             <TrendingUp size={16} className="text-muted-foreground" />
-            <span className="text-sm font-medium text-white">Outreach Funnel</span>
+            <span className="text-sm font-medium text-foreground">Outreach Funnel</span>
           </div>
           {totalContacts === 0 ? (
             <div className="py-6 text-center">
@@ -189,7 +189,7 @@ export default function DashboardPage() {
                     <div className="flex items-center justify-between mb-1">
                       <span className={`text-xs font-medium ${colors.text}`}>{stage.label}</span>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs tabular-nums text-white font-medium">{count}</span>
+                        <span className="text-xs tabular-nums text-foreground font-medium">{count}</span>
                         <span className="text-[10px] tabular-nums text-muted-foreground w-10 text-right">{pct.toFixed(0)}%</span>
                       </div>
                     </div>
@@ -207,7 +207,7 @@ export default function DashboardPage() {
         <div className="glass rounded-xl p-5">
           <div className="flex items-center gap-2 mb-4">
             <ListTodo size={16} className="text-muted-foreground" />
-            <span className="text-sm font-medium text-white">Pending Queue</span>
+            <span className="text-sm font-medium text-foreground">Pending Queue</span>
           </div>
           {loading ? (
             <div className="space-y-2">
@@ -224,7 +224,7 @@ export default function DashboardPage() {
                 <div key={item.id} className="flex items-center justify-between p-3 rounded-lg bg-secondary/50 border border-border/50">
                   <div className="flex items-center gap-3">
                     <Clock className="w-4 h-4 text-amber-400" />
-                    <span className="text-sm text-white">{item.contact_name}</span>
+                    <span className="text-sm text-foreground">{item.contact_name}</span>
                   </div>
                   <span className={`text-xs font-medium px-2.5 py-1 rounded-md border capitalize ${
                     item.action_type === 'connection'

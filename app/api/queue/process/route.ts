@@ -13,16 +13,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // Check daily limit
-    const today = stats.getToday(userId);
-    const dailyUsed = today.connections_sent + today.messages_sent;
-    if (dailyUsed >= user.daily_limit) {
-      return NextResponse.json({ error: 'Daily limit reached', processed: 0 });
-    }
+    // Daily limit only applies to connections, messages are unlimited
+    const today = stats.getToday(userId, user?.timezone);
+    const connectionsRemaining = user.daily_limit - today.connections_sent;
 
     const pending = queue.getPending(userId) as any[];
-    const remaining = user.daily_limit - dailyUsed;
-    const batch = pending.slice(0, Math.min(5, remaining));
+    // Process all messages + limited connections
+    const batch = pending.filter(item => {
+      if (item.action_type === 'message') return true;
+      return connectionsRemaining > 0;
+    }).slice(0, 10);
     const processed: number[] = [];
     const errors: string[] = [];
 
@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
 
             queue.updateStatus(item.id, 'completed', userId);
             contacts.updateStatus(item.contact_id, 'invite_sent', userId);
-            stats.increment('connections_sent', userId);
+            stats.increment('connections_sent', userId, user?.timezone);
 
           } else if (item.action_type === 'message') {
             // Send message
@@ -137,7 +137,7 @@ export async function POST(req: NextRequest) {
 
             queue.updateStatus(item.id, 'completed', userId);
             contacts.updateStatus(item.contact_id, 'msg_sent', userId);
-            stats.increment('messages_sent', userId);
+            stats.increment('messages_sent', userId, user?.timezone);
 
             // Log the message
             if (messageText) {
@@ -198,7 +198,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       processed: processed.length,
       errors: errors.length > 0 ? errors : undefined,
-      dailyRemaining: user.daily_limit - dailyUsed - processed.length,
+      connectionsRemaining: Math.max(0, connectionsRemaining - processed.filter(id => batch.find((b: any) => b.id === id)?.action_type === 'connection').length),
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

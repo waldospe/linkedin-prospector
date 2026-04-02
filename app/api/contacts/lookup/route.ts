@@ -50,12 +50,12 @@ export async function POST(req: NextRequest) {
 
     if (!res.ok) {
       const errText = await res.text();
-      console.log('LOOKUP error:', res.status, errText);
+      // Profile lookup failed
       return NextResponse.json({ error: 'Profile not found. Check the URL and try again.' }, { status: 404 });
     }
 
     const profile = await res.json();
-    console.log('LOOKUP full response:', JSON.stringify(profile, null, 2));
+    // Profile fetched
 
     // Extract name fields
     const firstName = profile.first_name || profile.firstName || '';
@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
       avatar_url: avatarUrl,
     });
   } catch (error: any) {
-    console.log('LOOKUP fatal error:', error.message);
+    console.error('Lookup error:', error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

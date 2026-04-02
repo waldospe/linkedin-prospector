@@ -81,8 +81,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden"
-      style={{ background: 'radial-gradient(ellipse at 50% 0%, hsl(220 40% 8%) 0%, hsl(230 15% 5.5%) 60%)' }}>
+    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden main-gradient">
       <div className="absolute top-[-20%] left-[30%] w-[500px] h-[500px] bg-blue-500/[0.04] rounded-full blur-[100px]" />
       <div className="absolute bottom-[-10%] right-[20%] w-[400px] h-[400px] bg-violet-500/[0.03] rounded-full blur-[80px]" />
 
@@ -91,8 +90,8 @@ export default function LoginPage() {
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl gradient-blue shadow-lg shadow-blue-500/20 mb-5">
             <Zap className="w-7 h-7 text-white" />
           </div>
-          <h1 className="text-[26px] font-bold text-white tracking-tight">LinkedIn Prospector</h1>
-          <p className="text-[14px] text-[hsl(220,10%,50%)] mt-1.5 font-light">
+          <h1 className="text-[26px] font-bold text-foreground tracking-tight">LinkedIn Prospector</h1>
+          <p className="text-[14px] text-muted-foreground mt-1.5 font-light">
             {mode === 'login' ? 'Sign in to manage your campaigns' : 'Create your account'}
           </p>
         </div>
@@ -107,7 +106,7 @@ export default function LoginPage() {
                   placeholder="Your full name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full h-11 rounded-lg border border-border bg-background/50 text-white px-3.5 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all"
+                  className="w-full h-11 rounded-lg border border-border bg-background/50 text-foreground px-3.5 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all"
                 />
               </div>
             )}
@@ -119,7 +118,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && (mode === 'login' ? handleLogin() : handleSignup())}
-                className="w-full h-11 rounded-lg border border-border bg-background/50 text-white px-3.5 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all"
+                className="w-full h-11 rounded-lg border border-border bg-background/50 text-foreground px-3.5 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all"
               />
             </div>
             <div>
@@ -131,11 +130,11 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && (mode === 'login' ? handleLogin() : handleSignup())}
-                  className="w-full h-11 rounded-lg border border-border bg-background/50 text-white px-3.5 pr-10 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all"
+                  className="w-full h-11 rounded-lg border border-border bg-background/50 text-foreground px-3.5 pr-10 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 transition-all"
                 />
                 <button
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white transition-colors"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                   type="button"
                 >
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -148,7 +147,7 @@ export default function LoginPage() {
                 <select
                   value={selectedTeam}
                   onChange={(e) => setSelectedTeam(e.target.value)}
-                  className="w-full h-11 rounded-lg border border-border bg-background/50 text-white px-3 text-sm focus:outline-none focus:border-blue-500/50 transition-all"
+                  className="w-full h-11 rounded-lg border border-border bg-background/50 text-foreground px-3 text-sm focus:outline-none focus:border-blue-500/50 transition-all"
                 >
                   <option value="">Select a team</option>
                   {teams.map(t => (<option key={t.id} value={t.id}>{t.name}</option>))}
@@ -160,7 +159,7 @@ export default function LoginPage() {
                     placeholder="Enter your team name"
                     value={newTeamName}
                     onChange={(e) => setNewTeamName(e.target.value)}
-                    className="w-full h-11 rounded-lg border border-border bg-background/50 text-white px-3.5 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-blue-500/50 transition-all mt-2"
+                    className="w-full h-11 rounded-lg border border-border bg-background/50 text-foreground px-3.5 text-sm placeholder:text-muted-foreground/50 focus:outline-none focus:border-blue-500/50 transition-all mt-2"
                   />
                 )}
               </div>
@@ -201,7 +200,7 @@ export default function LoginPage() {
                   {loading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mx-auto" /> : 'Send Reset Link'}
                 </button>
               )}
-              <button onClick={() => { setForgotMode(false); setForgotSent(false); setError(''); }} className="text-xs text-muted-foreground hover:text-white transition-colors text-center">
+              <button onClick={() => { setForgotMode(false); setForgotSent(false); setError(''); }} className="text-xs text-muted-foreground hover:text-foreground transition-colors text-center">
                 Back to sign in
               </button>
             </>

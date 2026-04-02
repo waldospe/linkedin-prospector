@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getEffectiveUser, getUserFromRequest } from '@/lib/api-auth';
-import { contacts, queue, sequences, users } from '@/lib/db';
+import { contacts, queue, sequences, users, activityLog } from '@/lib/db';
 import { substituteVariables } from '@/lib/constants';
 
 export async function GET(req: NextRequest) {
@@ -59,6 +59,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    activityLog.log(targetUserId, 'contact_created', 'contact', contactId, `Created ${data.first_name || ''} ${data.last_name || data.name || ''}`.trim());
     return NextResponse.json({ id: contactId });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to create contact' }, { status: 500 });

@@ -1,8 +1,13 @@
 import { SignJWT, jwtVerify } from 'jose';
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'moco-linkedin-prospector-secure-key'
-);
+function getJwtSecret() {
+  const secret = process.env.JWT_SECRET;
+  if (!secret && process.env.NODE_ENV === 'production') {
+    console.error('WARNING: JWT_SECRET environment variable is not set. Using insecure default key.');
+  }
+  return new TextEncoder().encode(secret || 'moco-linkedin-prospector-dev-key');
+}
+const JWT_SECRET = getJwtSecret();
 
 export interface TokenPayload {
   userId: number;

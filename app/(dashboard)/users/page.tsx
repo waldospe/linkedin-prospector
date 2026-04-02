@@ -163,7 +163,7 @@ export default function UsersPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-white tracking-tight">Team</h1>
+          <h1 className="text-2xl font-semibold text-foreground tracking-tight">Team</h1>
           <p className="text-sm text-muted-foreground mt-1">{users.length} members</p>
         </div>
         <button
@@ -184,7 +184,7 @@ export default function UsersPage() {
       {/* Add form */}
       {showAddForm && (
         <div className="glass rounded-xl p-6 animate-slide-up">
-          <h3 className="text-sm font-medium text-white mb-4">New Team Member</h3>
+          <h3 className="text-sm font-medium text-foreground mb-4">New Team Member</h3>
           <div className="grid grid-cols-2 gap-3 max-w-xl">
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Name</label>
@@ -200,7 +200,7 @@ export default function UsersPage() {
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Role</label>
-              <select value={newUser.role} onChange={(e) => setNewUser({ ...newUser, role: e.target.value })} className="w-full h-10 bg-background/50 text-white text-sm rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50">
+              <select value={newUser.role} onChange={(e) => setNewUser({ ...newUser, role: e.target.value })} className="w-full h-10 bg-background/50 text-foreground text-sm rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50">
                 <option value="user">User</option>
                 <option value="admin">Admin</option>
               </select>
@@ -208,7 +208,7 @@ export default function UsersPage() {
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Team</label>
               <div className="flex gap-2">
-                <select value={newUser.team_id} onChange={(e) => setNewUser({ ...newUser, team_id: e.target.value })} className="flex-1 h-10 bg-background/50 text-white text-sm rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50">
+                <select value={newUser.team_id} onChange={(e) => setNewUser({ ...newUser, team_id: e.target.value })} className="flex-1 h-10 bg-background/50 text-foreground text-sm rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50">
                   <option value="">Default (your team)</option>
                   {teamsList.map(t => (<option key={t.id} value={t.id}>{t.name}</option>))}
                   <option value="__new__">+ Create new team</option>
@@ -241,7 +241,7 @@ export default function UsersPage() {
             <button onClick={inviteUser} disabled={!newUser.name || !newUser.email} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 disabled:opacity-40 transition-all">
               <Mail size={14} /> Send Invite
             </button>
-            <button onClick={createUser} disabled={!newUser.name || !newUser.email || !newUser.password} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-white hover:bg-secondary disabled:opacity-40 transition-all">
+            <button onClick={createUser} disabled={!newUser.name || !newUser.email || !newUser.password} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-40 transition-all">
               <Plus size={14} /> Create with Password
             </button>
           </div>
@@ -259,10 +259,10 @@ export default function UsersPage() {
                 </div>
               )}
               <div className="flex gap-2 mt-2">
-                <input readOnly value={inviteResult.url} className="flex-1 h-8 bg-background/50 text-white text-xs rounded-lg px-3 border border-border" />
+                <input readOnly value={inviteResult.url} className="flex-1 h-8 bg-background/50 text-foreground text-xs rounded-lg px-3 border border-border" />
                 <button
                   onClick={() => { navigator.clipboard.writeText(inviteResult.url); showMsg('Copied!'); }}
-                  className="px-3 h-8 rounded-lg bg-secondary border border-border text-xs text-muted-foreground hover:text-white transition-all"
+                  className="px-3 h-8 rounded-lg bg-secondary border border-border text-xs text-muted-foreground hover:text-foreground transition-all"
                 >
                   <Copy size={12} />
                 </button>
@@ -277,12 +277,12 @@ export default function UsersPage() {
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <UsersIcon size={16} className="text-muted-foreground" />
-            <span className="text-sm font-medium text-white">Teams</span>
+            <span className="text-sm font-medium text-foreground">Teams</span>
           </div>
         </div>
         <div className="flex flex-wrap gap-2 mb-3">
           {teamsList.map(t => (
-            <span key={t.id} className="text-xs font-medium px-3 py-1.5 rounded-lg bg-secondary border border-border text-white">
+            <span key={t.id} className="text-xs font-medium px-3 py-1.5 rounded-lg bg-secondary border border-border text-foreground">
               {t.name}
             </span>
           ))}
@@ -308,7 +308,7 @@ export default function UsersPage() {
                     {user.name.charAt(0)}
                   </div>
                   <div>
-                    <h3 className="text-sm font-medium text-white">{user.name}</h3>
+                    <h3 className="text-sm font-medium text-foreground">{user.name}</h3>
                     <p className="text-xs text-muted-foreground">{user.email}</p>
                     <div className="flex items-center gap-2 mt-2">
                       <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-md border ${
@@ -363,7 +363,7 @@ export default function UsersPage() {
                         </div>
                         <div>
                           <label className="text-xs text-muted-foreground mb-1 block">Timezone</label>
-                          <select value={editFields.timezone || 'America/Los_Angeles'} onChange={(e) => setEditFields({ ...editFields, timezone: e.target.value })} className="h-8 bg-background/50 text-white text-xs rounded-lg px-2 border border-border focus:outline-none focus:border-blue-500/50 w-full">
+                          <select value={editFields.timezone || 'America/Los_Angeles'} onChange={(e) => setEditFields({ ...editFields, timezone: e.target.value })} className="h-8 bg-background/50 text-foreground text-xs rounded-lg px-2 border border-border focus:outline-none focus:border-blue-500/50 w-full">
                             {TIMEZONES.map(tz => (<option key={tz} value={tz}>{tz.replace(/_/g, ' ')}</option>))}
                           </select>
                         </div>
@@ -376,13 +376,13 @@ export default function UsersPage() {
                                 <div key={day} className="flex items-center gap-2 p-1.5 rounded-md bg-secondary/30">
                                   <label className="flex items-center gap-1.5 w-14 cursor-pointer">
                                     <input type="checkbox" checked={d.enabled} onChange={(e) => updateScheduleDay(day, 'enabled', e.target.checked)} className="w-3.5 h-3.5 rounded border-border bg-background accent-blue-600" />
-                                    <span className={`text-[11px] font-medium ${d.enabled ? 'text-white' : 'text-muted-foreground'}`}>{DAY_LABELS[day]}</span>
+                                    <span className={`text-[11px] font-medium ${d.enabled ? 'text-foreground' : 'text-muted-foreground'}`}>{DAY_LABELS[day]}</span>
                                   </label>
                                   {d.enabled && (
                                     <div className="flex items-center gap-1">
-                                      <input type="time" value={d.start} onChange={(e) => updateScheduleDay(day, 'start', e.target.value)} className="h-6 bg-background/50 text-white text-[11px] rounded px-1 border border-border focus:outline-none" />
+                                      <input type="time" value={d.start} onChange={(e) => updateScheduleDay(day, 'start', e.target.value)} className="h-6 bg-background/50 text-foreground text-[11px] rounded px-1 border border-border focus:outline-none" />
                                       <span className="text-[10px] text-muted-foreground">-</span>
-                                      <input type="time" value={d.end} onChange={(e) => updateScheduleDay(day, 'end', e.target.value)} className="h-6 bg-background/50 text-white text-[11px] rounded px-1 border border-border focus:outline-none" />
+                                      <input type="time" value={d.end} onChange={(e) => updateScheduleDay(day, 'end', e.target.value)} className="h-6 bg-background/50 text-foreground text-[11px] rounded px-1 border border-border focus:outline-none" />
                                     </div>
                                   )}
                                 </div>
@@ -398,7 +398,7 @@ export default function UsersPage() {
                           <button onClick={() => updateUser(user.id)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-500 transition-all">
                             <Save size={12} /> Save
                           </button>
-                          <button onClick={() => { setEditingId(null); setEditFields({}); }} className="px-3 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-white hover:bg-secondary transition-all">
+                          <button onClick={() => { setEditingId(null); setEditFields({}); }} className="px-3 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-all">
                             Cancel
                           </button>
                         </div>
@@ -408,7 +408,7 @@ export default function UsersPage() {
                 </div>
                 <div className="flex items-center gap-1.5">
                   {editingId !== user.id && (
-                    <button onClick={() => startEdit(user)} className="px-3 py-1.5 rounded-md text-xs text-muted-foreground hover:text-white hover:bg-secondary transition-all">
+                    <button onClick={() => startEdit(user)} className="px-3 py-1.5 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-all">
                       Edit
                     </button>
                   )}

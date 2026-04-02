@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserFromRequest } from '@/lib/api-auth';
-import { templates, users } from '@/lib/db';
+import { templates, users, activityLog } from '@/lib/db';
 
 export async function GET(req: NextRequest) {
   try {
@@ -28,6 +28,7 @@ export async function POST(req: NextRequest) {
       variables: data.variables,
     });
 
+    activityLog.log(userId, 'template_created', 'template', result.lastInsertRowid as number, `Created "${data.name}"`);
     return NextResponse.json({ id: result.lastInsertRowid });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to create template' }, { status: 500 });
