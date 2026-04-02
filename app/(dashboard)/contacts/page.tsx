@@ -10,10 +10,12 @@ import {
   DialogTrigger
 } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Trash2, Upload, ExternalLink, Search, Users, FileSpreadsheet, Link2, CheckCircle2, AlertCircle, ArrowRight, Filter, GitBranch, AlertTriangle, Edit2, Save, Pause, Play, Ban } from 'lucide-react';
+import { Plus, Trash2, Upload, ExternalLink, Search, Users, FileSpreadsheet, Link2, CheckCircle2, AlertCircle, ArrowRight, Filter, GitBranch, AlertTriangle, Edit2, Save, Pause, Play, Ban, Tag } from 'lucide-react';
 import { FUNNEL_STAGES, stageColors, STAGE_MAP } from '@/lib/constants';
 import { useUser } from '@/components/user-context';
 import ContactDetail from '@/components/contact-detail';
+import LabelBadge from '@/components/label-badge';
+import LabelPicker from '@/components/label-picker';
 
 interface Contact {
   id: number;
@@ -28,6 +30,7 @@ interface Contact {
   avatar_url?: string;
   sequence_name?: string;
   active_sequence_id?: number;
+  labels?: Array<{ id: number; name: string; color: string }>;
 }
 
 const getStatusDisplay = (status: string) => {
@@ -78,6 +81,11 @@ export default function ContactsPage() {
   const [lookingUp, setLookingUp] = useState(false);
   const [lookupError, setLookupError] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [allLabels, setAllLabels] = useState<Array<{ id: number; name: string; color: string }>>([]);
+  const [filterLabelIds, setFilterLabelIds] = useState<number[]>([]);
+  const [labelPickerContact, setLabelPickerContact] = useState<number | null>(null);
+  const [importLabelIds, setImportLabelIds] = useState<Array<number | { name: string; color: string }>>([]);
+  const [showImportLabelPicker, setShowImportLabelPicker] = useState(false);
   const { apiQuery, viewAs, isViewingAll } = useUser();
 
   // Debounce search
@@ -91,12 +99,15 @@ export default function ContactsPage() {
     fetch('/api/sequences').then(r => r.json()).then(data => {
       if (Array.isArray(data)) setSequencesList(data.filter((s: any) => s.active));
     });
-  }, [viewAs, page, filterStatus, search]);
+    fetch('/api/labels').then(r => r.json()).then(data => {
+      if (Array.isArray(data)) setAllLabels(data);
+    });
+  }, [viewAs, page, filterStatus, search, filterLabelIds]);
 
   const fetchContacts = async () => {
     try {
       const sep = apiQuery.includes('?') ? '&' : '?';
-      const params = `page=${page}&limit=${pageSize}${filterStatus !== 'all' ? `&status=${filterStatus}` : ''}${search ? `&search=${encodeURIComponent(search)}` : ''}`;
+      const params = `page=${page}&limit=${pageSize}${filterStatus !== 'all' ? `&status=${filterStatus}` : ''}${search ? `&search=${encodeURIComponent(search)}` : ''}${filterLabelIds.length > 0 ? `&label_ids=${filterLabelIds.join(',')}` : ''}`;
       const res = await fetch(`/api/contacts${apiQuery}${sep}${params}`);
       const data = await res.json();
       if (data.rows) {
@@ -349,6 +360,7 @@ export default function ContactsPage() {
             rows: chunk,
             mapping: importState.mapping,
             sequence_id: importState.sequenceId ? parseInt(importState.sequenceId) : undefined,
+            label_ids: importLabelIds.length > 0 ? importLabelIds : undefined,
           }),
         });
 
@@ -424,6 +436,37 @@ export default function ContactsPage() {
     const next = new Set(selectedIds);
     if (next.has(id)) next.delete(id); else next.add(id);
     setSelectedIds(next);
+  };
+
+  const toggleContactLabel = async (contactId: number, labelId: number) => {
+    const contact = contacts.find(c => c.id === contactId);
+    const hasLabel = contact?.labels?.some(l => l.id === labelId);
+    if (hasLabel) {
+      await fetch(`/api/contacts/${contactId}/labels`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label_id: labelId }) });
+    } else {
+      await fetch(`/api/contacts/${contactId}/labels`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label_id: labelId }) });
+    }
+    // Update local state immediately
+    setContacts(prev => prev.map(c => {
+      if (c.id !== contactId) return c;
+      const currentLabels = c.labels || [];
+      if (hasLabel) {
+        return { ...c, labels: currentLabels.filter(l => l.id !== labelId) };
+      } else {
+        const label = allLabels.find(l => l.id === labelId);
+        return label ? { ...c, labels: [...currentLabels, label] } : c;
+      }
+    }));
+  };
+
+  const createLabel = async (name: string, color: string) => {
+    const res = await fetch('/api/labels', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, color }) });
+    if (res.ok) {
+      const label = await res.json();
+      setAllLabels(prev => [...prev, label].sort((a, b) => a.name.localeCompare(b.name)));
+      return label;
+    }
+    return null;
   };
 
   return (
@@ -509,8 +552,18 @@ export default function ContactsPage() {
             {sources.map(s => (<option key={s} value={s}>{s}</option>))}
           </select>
         )}
-        {(filterStatus !== 'all' || filterSource !== 'all') && (
-          <button onClick={() => { setFilterStatus('all'); setFilterSource('all'); }} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+        {allLabels.length > 0 && (
+          <select
+            value={filterLabelIds.length === 1 ? String(filterLabelIds[0]) : ''}
+            onChange={(e) => { setFilterLabelIds(e.target.value ? [parseInt(e.target.value)] : []); setPage(1); }}
+            className="h-9 bg-card/50 text-foreground text-xs rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50"
+          >
+            <option value="">All Labels</option>
+            {allLabels.map(l => (<option key={l.id} value={l.id}>{l.name}</option>))}
+          </select>
+        )}
+        {(filterStatus !== 'all' || filterSource !== 'all' || filterLabelIds.length > 0) && (
+          <button onClick={() => { setFilterStatus('all'); setFilterSource('all'); setFilterLabelIds([]); }} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
             Clear
           </button>
         )}
@@ -532,6 +585,27 @@ export default function ContactsPage() {
               <button onClick={bulkAssignSequence} disabled={!bulkSequenceId} className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-500 disabled:opacity-40 transition-all">
                 Add to Sequence
               </button>
+            </div>
+          )}
+          <div className="h-4 w-px bg-border" />
+          {allLabels.length > 0 && (
+            <div className="relative">
+              <select
+                defaultValue=""
+                onChange={async (e) => {
+                  if (!e.target.value) return;
+                  const labelId = parseInt(e.target.value);
+                  for (const id of Array.from(selectedIds)) {
+                    await fetch(`/api/contacts/${id}/labels`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label_id: labelId }) });
+                  }
+                  fetchContacts();
+                  e.target.value = '';
+                }}
+                className="h-8 bg-background/50 text-foreground text-xs rounded-lg px-2 border border-border focus:outline-none focus:border-blue-500/50"
+              >
+                <option value="">+ Label</option>
+                {allLabels.map(l => (<option key={l.id} value={l.id}>{l.name}</option>))}
+              </select>
             </div>
           )}
           <div className="h-4 w-px bg-border" />
@@ -591,6 +665,16 @@ export default function ContactsPage() {
                     <p className="text-xs text-muted-foreground truncate">
                       {contact.title}{contact.title && contact.company ? ' at ' : ''}{contact.company}
                     </p>
+                    {contact.labels && contact.labels.length > 0 && (
+                      <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                        {contact.labels.slice(0, 3).map(l => (
+                          <LabelBadge key={l.id} name={l.name} color={l.color} />
+                        ))}
+                        {contact.labels.length > 3 && (
+                          <span className="text-[10px] text-muted-foreground">+{contact.labels.length - 3}</span>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
                     <span className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-md ${cfg.bg}`}>
@@ -617,6 +701,22 @@ export default function ContactsPage() {
                         <Ban size={12} />
                       </button>
                     )}
+                    <div className="relative">
+                      <button onClick={() => setLabelPickerContact(labelPickerContact === contact.id ? null : contact.id)} className="p-1 rounded-md text-muted-foreground hover:text-blue-400 hover:bg-blue-500/10 transition-all" title="Labels">
+                        <Tag size={12} />
+                      </button>
+                      {labelPickerContact === contact.id && (
+                        <div className="absolute right-0 top-8 z-50">
+                          <LabelPicker
+                            selectedIds={contact.labels?.map(l => l.id) || []}
+                            onToggle={(labelId) => toggleContactLabel(contact.id, labelId)}
+                            onCreate={createLabel}
+                            allLabels={allLabels}
+                          />
+                          <div className="fixed inset-0 -z-10" onClick={() => setLabelPickerContact(null)} />
+                        </div>
+                      )}
+                    </div>
                     <button onClick={() => isEditing ? setEditingContact(null) : startEditContact(contact)} className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-all" title="Edit">
                       <Edit2 size={12} />
                     </button>
@@ -796,6 +896,50 @@ export default function ContactsPage() {
                   <p className="text-amber-400 text-sm">Map at least a name column</p>
                 </div>
               )}
+              {/* Labels on import */}
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Apply Labels (optional)</label>
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {(importLabelIds as any[]).map((item, i) => {
+                    const label = typeof item === 'number' ? allLabels.find(l => l.id === item) : item;
+                    if (!label) return null;
+                    const name = typeof label === 'object' && 'name' in label ? label.name : '';
+                    const color = typeof label === 'object' && 'color' in label ? label.color : '#6B7280';
+                    return <LabelBadge key={i} name={name} color={color} onRemove={() => setImportLabelIds(prev => prev.filter((_, idx) => idx !== i))} size="md" />;
+                  })}
+                </div>
+                <div className="relative">
+                  <button
+                    onClick={() => setShowImportLabelPicker(!showImportLabelPicker)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:text-foreground hover:bg-secondary transition-all"
+                  >
+                    <Tag size={12} />
+                    Add Labels
+                  </button>
+                  {showImportLabelPicker && (
+                    <div className="absolute left-0 top-9 z-50">
+                      <LabelPicker
+                        selectedIds={(importLabelIds as any[]).filter(x => typeof x === 'number') as number[]}
+                        onToggle={(labelId) => {
+                          setImportLabelIds(prev => {
+                            const numericIds = prev.filter(x => typeof x === 'number') as number[];
+                            if (numericIds.includes(labelId)) return prev.filter(x => x !== labelId);
+                            return [...prev, labelId];
+                          });
+                        }}
+                        onCreate={async (name, color) => {
+                          const label = await createLabel(name, color);
+                          if (label) setImportLabelIds(prev => [...prev, label.id]);
+                          return label;
+                        }}
+                        allLabels={allLabels}
+                      />
+                      <div className="fixed inset-0 -z-10" onClick={() => setShowImportLabelPicker(false)} />
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {/* Sequence on import */}
               {sequencesList.length > 0 && (
                 <div>

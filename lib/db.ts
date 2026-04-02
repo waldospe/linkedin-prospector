@@ -119,6 +119,27 @@ function initDb() {
     db.exec('UPDATE schema_version SET version = 9');
   }
 
+  if (currentVersion === 9) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS labels (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        color TEXT DEFAULT '#6B7280',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(team_id, name)
+      )
+    `);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS contact_labels (
+        contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+        label_id INTEGER NOT NULL REFERENCES labels(id) ON DELETE CASCADE,
+        PRIMARY KEY (contact_id, label_id)
+      )
+    `);
+    db.exec('UPDATE schema_version SET version = 10');
+  }
+
   // Activity log
   db.exec(`
     CREATE TABLE IF NOT EXISTS activity_log (
@@ -270,6 +291,25 @@ function initDb() {
       status TEXT DEFAULT 'active',
       connected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       last_check DATETIME
+    )
+  `);
+
+  // Labels (team-scoped)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS labels (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      color TEXT DEFAULT '#6B7280',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(team_id, name)
+    )
+  `);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS contact_labels (
+      contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+      label_id INTEGER NOT NULL REFERENCES labels(id) ON DELETE CASCADE,
+      PRIMARY KEY (contact_id, label_id)
     )
   `);
 
@@ -455,15 +495,21 @@ export const contacts = {
   getAll: (userId: number) => {
     return getDb().prepare('SELECT * FROM contacts WHERE user_id = ? ORDER BY created_at DESC').all(userId);
   },
-  getPaginated: (userId: number, opts: { limit: number; offset: number; status?: string; search?: string }) => {
+  getPaginated: (userId: number, opts: { limit: number; offset: number; status?: string; search?: string; labelIds?: number[] }) => {
     let where = 'WHERE c.user_id = ?';
     const params: any[] = [userId];
     if (opts.status && opts.status !== 'all') { where += ' AND c.status = ?'; params.push(opts.status); }
     if (opts.search) { where += ' AND (c.name LIKE ? OR c.first_name LIKE ? OR c.last_name LIKE ? OR c.company LIKE ? OR c.title LIKE ?)'; const s = `%${opts.search}%`; params.push(s, s, s, s, s); }
-    const total = getDb().prepare(`SELECT COUNT(*) as count FROM contacts c ${where}`).get(...params) as any;
+    let labelJoin = '';
+    if (opts.labelIds && opts.labelIds.length > 0) {
+      const placeholders = opts.labelIds.map(() => '?').join(',');
+      labelJoin = `INNER JOIN contact_labels clf ON clf.contact_id = c.id AND clf.label_id IN (${placeholders})`;
+      params.push(...opts.labelIds);
+    }
+    const total = getDb().prepare(`SELECT COUNT(DISTINCT c.id) as count FROM contacts c ${labelJoin} ${where}`).get(...params) as any;
     params.push(opts.limit, opts.offset);
     const rows = getDb().prepare(`
-      SELECT c.*, sq.sequence_name, sq.sequence_id as active_sequence_id FROM contacts c
+      SELECT DISTINCT c.*, sq.sequence_name, sq.sequence_id as active_sequence_id FROM contacts c
       LEFT JOIN (
         SELECT q.contact_id, s.name as sequence_name, q.sequence_id,
           ROW_NUMBER() OVER (PARTITION BY q.contact_id ORDER BY q.id DESC) as rn
@@ -471,8 +517,24 @@ export const contacts = {
         JOIN sequences s ON q.sequence_id = s.id
         WHERE q.user_id = ?
       ) sq ON sq.contact_id = c.id AND sq.rn = 1
+      ${labelJoin}
       ${where} ORDER BY c.created_at DESC LIMIT ? OFFSET ?
     `).all(userId, ...params);
+
+    // Attach labels to each contact
+    if (rows.length > 0) {
+      const contactIds = rows.map((r: any) => r.id);
+      const allLabels = contactLabels.getByContacts(contactIds);
+      const labelMap = new Map<number, any[]>();
+      for (const lbl of allLabels as any[]) {
+        if (!labelMap.has(lbl.contact_id)) labelMap.set(lbl.contact_id, []);
+        labelMap.get(lbl.contact_id)!.push({ id: lbl.id, name: lbl.name, color: lbl.color });
+      }
+      for (const row of rows as any[]) {
+        row.labels = labelMap.get(row.id) || [];
+      }
+    }
+
     return { rows, total: total.count };
   },
   getAllTeam: (teamId?: number) => {
@@ -858,5 +920,80 @@ export const activityLog = {
       JOIN users u ON al.user_id = u.id
       ORDER BY al.created_at DESC LIMIT ?
     `).all(limit);
+  },
+};
+
+// Labels (team-scoped tags for contacts)
+export const labels = {
+  getByTeam: (teamId: number) => {
+    return getDb().prepare('SELECT * FROM labels WHERE team_id = ? ORDER BY name').all(teamId);
+  },
+  getById: (id: number, teamId: number) => {
+    return getDb().prepare('SELECT * FROM labels WHERE id = ? AND team_id = ?').get(id, teamId);
+  },
+  create: (teamId: number, data: { name: string; color?: string }) => {
+    return getDb().prepare('INSERT INTO labels (team_id, name, color) VALUES (?, ?, ?)')
+      .run(teamId, data.name.trim(), data.color || '#6B7280');
+  },
+  update: (id: number, teamId: number, data: { name?: string; color?: string }) => {
+    const fields: string[] = [];
+    const params: any[] = [];
+    if (data.name !== undefined) { fields.push('name = ?'); params.push(data.name.trim()); }
+    if (data.color !== undefined) { fields.push('color = ?'); params.push(data.color); }
+    if (fields.length === 0) return;
+    params.push(id, teamId);
+    return getDb().prepare(`UPDATE labels SET ${fields.join(', ')} WHERE id = ? AND team_id = ?`).run(...params);
+  },
+  delete: (id: number, teamId: number) => {
+    return getDb().prepare('DELETE FROM labels WHERE id = ? AND team_id = ?').run(id, teamId);
+  },
+  findOrCreate: (teamId: number, name: string, color?: string): number => {
+    const trimmed = name.trim();
+    const existing = getDb().prepare('SELECT id FROM labels WHERE team_id = ? AND name = ?').get(teamId, trimmed) as any;
+    if (existing) return existing.id;
+    const result = getDb().prepare('INSERT INTO labels (team_id, name, color) VALUES (?, ?, ?)').run(teamId, trimmed, color || '#6B7280');
+    return result.lastInsertRowid as number;
+  },
+};
+
+// Contact-Label associations
+export const contactLabels = {
+  getByContact: (contactId: number) => {
+    return getDb().prepare(`
+      SELECT l.* FROM labels l
+      JOIN contact_labels cl ON cl.label_id = l.id
+      WHERE cl.contact_id = ?
+      ORDER BY l.name
+    `).all(contactId);
+  },
+  getByContacts: (contactIds: number[]) => {
+    if (contactIds.length === 0) return [];
+    const placeholders = contactIds.map(() => '?').join(',');
+    return getDb().prepare(`
+      SELECT cl.contact_id, l.id, l.name, l.color FROM labels l
+      JOIN contact_labels cl ON cl.label_id = l.id
+      WHERE cl.contact_id IN (${placeholders})
+      ORDER BY l.name
+    `).all(...contactIds);
+  },
+  add: (contactId: number, labelId: number) => {
+    return getDb().prepare('INSERT OR IGNORE INTO contact_labels (contact_id, label_id) VALUES (?, ?)').run(contactId, labelId);
+  },
+  remove: (contactId: number, labelId: number) => {
+    return getDb().prepare('DELETE FROM contact_labels WHERE contact_id = ? AND label_id = ?').run(contactId, labelId);
+  },
+  setForContact: (contactId: number, labelIds: number[]) => {
+    const db = getDb();
+    db.prepare('DELETE FROM contact_labels WHERE contact_id = ?').run(contactId);
+    const insert = db.prepare('INSERT OR IGNORE INTO contact_labels (contact_id, label_id) VALUES (?, ?)');
+    for (const labelId of labelIds) {
+      insert.run(contactId, labelId);
+    }
+  },
+  bulkAdd: (contactIds: number[], labelId: number) => {
+    const insert = getDb().prepare('INSERT OR IGNORE INTO contact_labels (contact_id, label_id) VALUES (?, ?)');
+    for (const contactId of contactIds) {
+      insert.run(contactId, labelId);
+    }
   },
 };

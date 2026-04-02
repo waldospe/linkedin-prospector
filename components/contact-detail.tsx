@@ -1,9 +1,11 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { X, ExternalLink, Send, MapPin, Users, Linkedin, Clock, CheckCircle2, AlertCircle, MessageCircle, GitBranch, Loader2 } from 'lucide-react';
+import { X, ExternalLink, Send, MapPin, Users, Linkedin, Clock, CheckCircle2, AlertCircle, MessageCircle, GitBranch, Loader2, Tag, Plus } from 'lucide-react';
 import { STAGE_MAP, stageColors } from '@/lib/constants';
 import { useUser } from '@/components/user-context';
+import LabelBadge from '@/components/label-badge';
+import LabelPicker from '@/components/label-picker';
 
 interface ContactDetailProps {
   contactId: number;
@@ -17,10 +19,15 @@ export default function ContactDetail({ contactId, onClose }: ContactDetailProps
   const [sending, setSending] = useState(false);
   const [sendResult, setSendResult] = useState<string>('');
   const messageEndRef = useRef<HTMLDivElement>(null);
+  const [contactLabels, setContactLabels] = useState<any[]>([]);
+  const [allLabels, setAllLabels] = useState<any[]>([]);
+  const [showLabelPicker, setShowLabelPicker] = useState(false);
   const { apiQuery } = useUser();
 
   useEffect(() => {
     fetchDetail();
+    fetch(`/api/contacts/${contactId}/labels`).then(r => r.json()).then(d => { if (Array.isArray(d)) setContactLabels(d); });
+    fetch('/api/labels').then(r => r.json()).then(d => { if (Array.isArray(d)) setAllLabels(d); });
   }, [contactId]);
 
   useEffect(() => {
@@ -146,6 +153,52 @@ export default function ContactDetail({ contactId, onClose }: ContactDetailProps
                     {statusCfg.label}
                   </div>
                 )}
+              </div>
+
+              {/* Labels */}
+              <div>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {contactLabels.map((l: any) => (
+                    <LabelBadge key={l.id} name={l.name} color={l.color} size="md" onRemove={async () => {
+                      await fetch(`/api/contacts/${contactId}/labels`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label_id: l.id }) });
+                      setContactLabels(prev => prev.filter(x => x.id !== l.id));
+                    }} />
+                  ))}
+                  <div className="relative">
+                    <button onClick={() => setShowLabelPicker(!showLabelPicker)} className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground px-2 py-0.5 rounded-md border border-dashed border-border hover:border-foreground/30 transition-all">
+                      <Plus size={10} /> Label
+                    </button>
+                    {showLabelPicker && (
+                      <div className="absolute left-0 top-7 z-50">
+                        <LabelPicker
+                          selectedIds={contactLabels.map((l: any) => l.id)}
+                          onToggle={async (labelId) => {
+                            const has = contactLabels.some((l: any) => l.id === labelId);
+                            if (has) {
+                              await fetch(`/api/contacts/${contactId}/labels`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label_id: labelId }) });
+                              setContactLabels(prev => prev.filter(x => x.id !== labelId));
+                            } else {
+                              await fetch(`/api/contacts/${contactId}/labels`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label_id: labelId }) });
+                              const label = allLabels.find((l: any) => l.id === labelId);
+                              if (label) setContactLabels(prev => [...prev, label]);
+                            }
+                          }}
+                          onCreate={async (name, color) => {
+                            const res = await fetch('/api/labels', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, color }) });
+                            if (res.ok) {
+                              const label = await res.json();
+                              setAllLabels(prev => [...prev, label].sort((a, b) => a.name.localeCompare(b.name)));
+                              return label;
+                            }
+                            return null;
+                          }}
+                          allLabels={allLabels}
+                        />
+                        <div className="fixed inset-0 -z-10" onClick={() => setShowLabelPicker(false)} />
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {/* LinkedIn link */}

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getEffectiveUser } from '@/lib/api-auth';
-import { contacts, sequences, queue, users, activityLog } from '@/lib/db';
+import { contacts, sequences, queue, users, activityLog, labels, contactLabels } from '@/lib/db';
 import { normalizeLinkedInUrl, isValidLinkedInUrl, substituteVariables } from '@/lib/constants';
 
 // Allow large request bodies for CSV imports (up to 10MB)
@@ -209,8 +209,31 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      activityLog.log(userId!, 'import_csv', 'contact', undefined, `Imported ${count} of ${rows.length} contacts${sequenced ? `, ${sequenced} sequenced` : ''}`);
-      return NextResponse.json({ imported: count, total: rows.length, invalidUrls, duplicates, sequenced });
+      // Apply labels if specified
+      let labelsApplied = 0;
+      if (body.label_ids && Array.isArray(body.label_ids) && body.label_ids.length > 0 && count > 0) {
+        const user = users.getById(userId!) as any;
+        const teamId = user?.team_id;
+        if (teamId) {
+          const resolvedIds: number[] = [];
+          for (const item of body.label_ids) {
+            if (typeof item === 'number') {
+              resolvedIds.push(item);
+            } else if (typeof item === 'object' && item.name) {
+              resolvedIds.push(labels.findOrCreate(teamId, item.name, item.color));
+            }
+          }
+          for (const contactId of insertedIds) {
+            for (const labelId of resolvedIds) {
+              contactLabels.add(contactId, labelId);
+            }
+          }
+          labelsApplied = resolvedIds.length;
+        }
+      }
+
+      activityLog.log(userId!, 'import_csv', 'contact', undefined, `Imported ${count} of ${rows.length} contacts${sequenced ? `, ${sequenced} sequenced` : ''}${labelsApplied ? `, ${labelsApplied} labels applied` : ''}`);
+      return NextResponse.json({ imported: count, total: rows.length, invalidUrls, duplicates, sequenced, labelsApplied });
     }
 
     return NextResponse.json({ error: 'Invalid request. Send { headers } or { rows, mapping }' }, { status: 400 });

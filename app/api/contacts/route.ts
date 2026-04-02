@@ -11,6 +11,8 @@ export async function GET(req: NextRequest) {
     const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 100);
     const status = searchParams.get('status') || undefined;
     const search = searchParams.get('search') || undefined;
+    const labelIdsParam = searchParams.get('label_ids');
+    const labelIds = labelIdsParam ? labelIdsParam.split(',').map(Number).filter(n => !isNaN(n)) : undefined;
 
     if (isAll) {
       const user = users.getById(userId) as any;
@@ -19,7 +21,7 @@ export async function GET(req: NextRequest) {
 
     // Use pagination if page param is present
     if (searchParams.has('page')) {
-      const result = contacts.getPaginated(effectiveUserId!, { limit, offset: (page - 1) * limit, status, search });
+      const result = contacts.getPaginated(effectiveUserId!, { limit, offset: (page - 1) * limit, status, search, labelIds });
       return NextResponse.json({ rows: result.rows, total: result.total, page, limit });
     }
 
