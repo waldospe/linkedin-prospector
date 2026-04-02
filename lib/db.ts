@@ -47,7 +47,7 @@ function initDb() {
       db.exec(`DROP TABLE IF EXISTS ${t}`);
     }
     db.exec('DELETE FROM schema_version');
-    db.exec('INSERT INTO schema_version (version) VALUES (9)');
+    db.exec('INSERT INTO schema_version (version) VALUES (10)');
   }
 
   if (currentVersion >= 2 && currentVersion < 4) {
@@ -496,18 +496,27 @@ export const contacts = {
     return getDb().prepare('SELECT * FROM contacts WHERE user_id = ? ORDER BY created_at DESC').all(userId);
   },
   getPaginated: (userId: number, opts: { limit: number; offset: number; status?: string; search?: string; labelIds?: number[] }) => {
+    // Build WHERE clause and its params
     let where = 'WHERE c.user_id = ?';
-    const params: any[] = [userId];
-    if (opts.status && opts.status !== 'all') { where += ' AND c.status = ?'; params.push(opts.status); }
-    if (opts.search) { where += ' AND (c.name LIKE ? OR c.first_name LIKE ? OR c.last_name LIKE ? OR c.company LIKE ? OR c.title LIKE ?)'; const s = `%${opts.search}%`; params.push(s, s, s, s, s); }
+    const whereParams: any[] = [userId];
+    if (opts.status && opts.status !== 'all') { where += ' AND c.status = ?'; whereParams.push(opts.status); }
+    if (opts.search) { where += ' AND (c.name LIKE ? OR c.first_name LIKE ? OR c.last_name LIKE ? OR c.company LIKE ? OR c.title LIKE ?)'; const s = `%${opts.search}%`; whereParams.push(s, s, s, s, s); }
+
+    // Build label JOIN and its params (bound before WHERE in SQL order)
     let labelJoin = '';
+    const labelParams: any[] = [];
     if (opts.labelIds && opts.labelIds.length > 0) {
       const placeholders = opts.labelIds.map(() => '?').join(',');
       labelJoin = `INNER JOIN contact_labels clf ON clf.contact_id = c.id AND clf.label_id IN (${placeholders})`;
-      params.push(...opts.labelIds);
+      labelParams.push(...opts.labelIds);
     }
-    const total = getDb().prepare(`SELECT COUNT(DISTINCT c.id) as count FROM contacts c ${labelJoin} ${where}`).get(...params) as any;
-    params.push(opts.limit, opts.offset);
+
+    // Count query: labelJoin params come first (JOIN before WHERE in SQL)
+    const countParams = [...labelParams, ...whereParams];
+    const total = getDb().prepare(`SELECT COUNT(DISTINCT c.id) as count FROM contacts c ${labelJoin} ${where}`).get(...countParams) as any;
+
+    // Rows query: subquery userId, then labelJoin params, then WHERE params, then LIMIT/OFFSET
+    const rowParams = [userId, ...labelParams, ...whereParams, opts.limit, opts.offset];
     const rows = getDb().prepare(`
       SELECT DISTINCT c.*, sq.sequence_name, sq.sequence_id as active_sequence_id FROM contacts c
       LEFT JOIN (
@@ -519,7 +528,7 @@ export const contacts = {
       ) sq ON sq.contact_id = c.id AND sq.rn = 1
       ${labelJoin}
       ${where} ORDER BY c.created_at DESC LIMIT ? OFFSET ?
-    `).all(userId, ...params);
+    `).all(...rowParams);
 
     // Attach labels to each contact
     if (rows.length > 0) {

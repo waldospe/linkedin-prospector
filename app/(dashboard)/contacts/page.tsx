@@ -102,7 +102,7 @@ export default function ContactsPage() {
     fetch('/api/labels').then(r => r.json()).then(data => {
       if (Array.isArray(data)) setAllLabels(data);
     });
-  }, [viewAs, page, filterStatus, search, filterLabelIds]);
+  }, [apiQuery, page, filterStatus, search, filterLabelIds]);
 
   const fetchContacts = async () => {
     try {
