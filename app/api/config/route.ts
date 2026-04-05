@@ -15,6 +15,9 @@ export async function GET(req: NextRequest) {
       message_delay_max: user.message_delay_max,
       send_schedule: user.send_schedule,
       timezone: (user as any).timezone || 'America/Los_Angeles',
+      email_daily_digest: (user as any).email_daily_digest ?? 1,
+      email_reply_alerts: (user as any).email_reply_alerts ?? 1,
+      digest_send_hour: (user as any).digest_send_hour ?? 8,
     };
 
     // Admin also gets global Unipile config
@@ -43,6 +46,9 @@ export async function PUT(req: NextRequest) {
     if (data.message_delay_max !== undefined) userFields.message_delay_max = data.message_delay_max;
     if (data.send_schedule !== undefined) userFields.send_schedule = data.send_schedule;
     if (data.timezone !== undefined) userFields.timezone = data.timezone;
+    if (data.email_daily_digest !== undefined) userFields.email_daily_digest = data.email_daily_digest ? 1 : 0;
+    if (data.email_reply_alerts !== undefined) userFields.email_reply_alerts = data.email_reply_alerts ? 1 : 0;
+    if (data.digest_send_hour !== undefined) userFields.digest_send_hour = data.digest_send_hour;
 
     if (Object.keys(userFields).length > 0) {
       users.update(userId, userFields);

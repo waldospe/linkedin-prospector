@@ -37,6 +37,9 @@ export default function LoginPage() {
       });
       const data = await res.json();
       if (res.ok) {
+        if (data.previousLogin) {
+          try { localStorage.setItem('lp-previous-login', data.previousLogin); } catch {}
+        }
         window.location.href = '/';
       } else {
         setError(data.error || 'Login failed');

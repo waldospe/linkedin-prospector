@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { useUser } from '@/components/user-context';
-import { Save, Key, Clock, Shield, Lock, CheckCircle2, Globe, Calendar, Linkedin, Eye, EyeOff } from 'lucide-react';
+import { Save, Key, Clock, Shield, Lock, CheckCircle2, Globe, Calendar, Linkedin, Eye, EyeOff, Mail } from 'lucide-react';
 
 const TIMEZONES = [
   'America/New_York',
@@ -45,6 +45,9 @@ interface Config {
   message_delay_max: number;
   timezone: string;
   send_schedule: Record<string, SendDay>;
+  email_daily_digest?: number;
+  email_reply_alerts?: number;
+  digest_send_hour?: number;
 }
 
 const defaultSchedule: Record<string, SendDay> = {
@@ -66,6 +69,9 @@ export default function SettingsPage() {
     message_delay_max: 20,
     timezone: 'America/Los_Angeles',
     send_schedule: defaultSchedule,
+    email_daily_digest: 1,
+    email_reply_alerts: 1,
+    digest_send_hour: 8,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -277,6 +283,60 @@ export default function SettingsPage() {
             <option key={tz} value={tz}>{tz.replace(/_/g, ' ')}</option>
           ))}
         </select>
+      </div>
+
+      {/* Email Notifications */}
+      <div className="glass rounded-xl p-6">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/15 flex items-center justify-center">
+            <Mail size={14} className="text-emerald-400" />
+          </div>
+          <div>
+            <h3 className="text-sm font-medium text-foreground">Email Notifications</h3>
+            <p className="text-xs text-muted-foreground">Stay on top of replies and daily activity</p>
+          </div>
+        </div>
+        <div className="space-y-4 max-w-md">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={!!config.email_reply_alerts}
+              onChange={(e) => setConfig({ ...config, email_reply_alerts: e.target.checked ? 1 : 0 })}
+              className="w-4 h-4 mt-0.5 rounded border-border bg-background accent-blue-600 shrink-0"
+            />
+            <div>
+              <p className="text-sm font-medium text-foreground">Instant reply alerts</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Email me the moment someone replies on LinkedIn</p>
+            </div>
+          </label>
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={!!config.email_daily_digest}
+              onChange={(e) => setConfig({ ...config, email_daily_digest: e.target.checked ? 1 : 0 })}
+              className="w-4 h-4 mt-0.5 rounded border-border bg-background accent-blue-600 shrink-0"
+            />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-foreground">Daily morning digest</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Yesterday's activity + today's queue, delivered to your inbox</p>
+              {config.email_daily_digest ? (
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="text-xs text-muted-foreground">Send at</span>
+                  <select
+                    value={config.digest_send_hour || 8}
+                    onChange={(e) => setConfig({ ...config, digest_send_hour: parseInt(e.target.value) })}
+                    className="h-7 bg-background/50 text-foreground text-xs rounded-lg px-2 border border-border focus:outline-none focus:border-blue-500/50"
+                  >
+                    {Array.from({ length: 24 }, (_, i) => (
+                      <option key={i} value={i}>{i === 0 ? '12 AM' : i < 12 ? `${i} AM` : i === 12 ? '12 PM' : `${i - 12} PM`}</option>
+                    ))}
+                  </select>
+                  <span className="text-xs text-muted-foreground">({config.timezone.replace(/_/g, ' ')})</span>
+                </div>
+              ) : null}
+            </div>
+          </label>
+        </div>
       </div>
 
       {/* Send Schedule */}

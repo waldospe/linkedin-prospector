@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { queue, contacts, stats, users, globalConfig, templates, messages, sequences, getDb } from '@/lib/db';
 import { substituteVariables } from '@/lib/constants';
-import { sendAlertEmail } from '@/lib/email';
+import { sendAlertEmail, sendReplyAlertEmail } from '@/lib/email';
 
 // Track error rate for alerting
 let consecutiveEmptyCycles = 0;
@@ -427,6 +427,18 @@ async function monitorContacts(user: any, cfg: any, baseUrl: string): Promise<nu
           stats.increment('replies_received', user.id, user.timezone);
           messages.markReplied(contact.id, user.id);
           updated++;
+
+          // Fire instant reply alert email (if user opted in)
+          if (user.email_reply_alerts !== 0 && user.email) {
+            sendReplyAlertEmail({
+              to: user.email,
+              userName: user.name,
+              contactName: [contact.first_name, contact.last_name].filter(Boolean).join(' ') || contact.name || 'Your contact',
+              contactCompany: contact.company,
+              contactTitle: contact.title,
+              contactId: contact.id,
+            }).catch(() => {});
+          }
         }
       }
     } catch {

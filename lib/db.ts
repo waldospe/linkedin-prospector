@@ -47,7 +47,7 @@ function initDb() {
       db.exec(`DROP TABLE IF EXISTS ${t}`);
     }
     db.exec('DELETE FROM schema_version');
-    db.exec('INSERT INTO schema_version (version) VALUES (10)');
+    db.exec('INSERT INTO schema_version (version) VALUES (11)');
   }
 
   if (currentVersion >= 2 && currentVersion < 4) {
@@ -140,6 +140,27 @@ function initDb() {
     db.exec('UPDATE schema_version SET version = 10');
   }
 
+  if (currentVersion === 10) {
+    // Add email preference + last_login columns to users
+    const uCols = db.pragma('table_info(users)') as any[];
+    if (uCols && !uCols.find((c: any) => c.name === 'last_login')) {
+      db.exec(`ALTER TABLE users ADD COLUMN last_login DATETIME`);
+    }
+    if (uCols && !uCols.find((c: any) => c.name === 'email_daily_digest')) {
+      db.exec(`ALTER TABLE users ADD COLUMN email_daily_digest INTEGER DEFAULT 1`);
+    }
+    if (uCols && !uCols.find((c: any) => c.name === 'email_reply_alerts')) {
+      db.exec(`ALTER TABLE users ADD COLUMN email_reply_alerts INTEGER DEFAULT 1`);
+    }
+    if (uCols && !uCols.find((c: any) => c.name === 'digest_send_hour')) {
+      db.exec(`ALTER TABLE users ADD COLUMN digest_send_hour INTEGER DEFAULT 8`);
+    }
+    if (uCols && !uCols.find((c: any) => c.name === 'last_digest_sent')) {
+      db.exec(`ALTER TABLE users ADD COLUMN last_digest_sent DATE`);
+    }
+    db.exec('UPDATE schema_version SET version = 11');
+  }
+
   // Activity log
   db.exec(`
     CREATE TABLE IF NOT EXISTS activity_log (
@@ -180,6 +201,11 @@ function initDb() {
       timezone TEXT DEFAULT 'America/Los_Angeles',
       invite_token TEXT,
       invite_status TEXT DEFAULT 'active',
+      last_login DATETIME,
+      email_daily_digest INTEGER DEFAULT 1,
+      email_reply_alerts INTEGER DEFAULT 1,
+      digest_send_hour INTEGER DEFAULT 8,
+      last_digest_sent DATE,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
@@ -391,17 +417,28 @@ export const users = {
   getAll: () => {
     return getDb().prepare(`
       SELECT id, name, email, role, team_id, unipile_account_id, pipedrive_api_key,
-             daily_limit, message_delay_min, message_delay_max, send_schedule, timezone, created_at
+             daily_limit, message_delay_min, message_delay_max, send_schedule, timezone,
+             last_login, email_daily_digest, email_reply_alerts, digest_send_hour, last_digest_sent,
+             created_at
       FROM users ORDER BY name
     `).all().map(parseUserSchedule);
   },
   getById: (id: number) => {
     const row = getDb().prepare(`
       SELECT id, name, email, role, team_id, unipile_account_id, pipedrive_api_key,
-             daily_limit, message_delay_min, message_delay_max, send_schedule, timezone, created_at
+             daily_limit, message_delay_min, message_delay_max, send_schedule, timezone,
+             last_login, email_daily_digest, email_reply_alerts, digest_send_hour, last_digest_sent,
+             created_at
       FROM users WHERE id = ?
     `).get(id);
     return row ? parseUserSchedule(row) : null;
+  },
+  updateLastLogin: (id: number) => {
+    return getDb().prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+  },
+  getPreviousLastLogin: (id: number): string | null => {
+    const row = getDb().prepare('SELECT last_login FROM users WHERE id = ?').get(id) as any;
+    return row?.last_login || null;
   },
   getByEmail: (email: string) => {
     return getDb().prepare('SELECT * FROM users WHERE email = ?').get(email) as any;

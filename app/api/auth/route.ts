@@ -23,12 +23,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
     }
 
+    // Capture previous login for "since you were gone" banner, then update
+    const previousLogin = users.getPreviousLastLogin(user.id);
+    users.updateLastLogin(user.id);
     activityLog.log(user.id, 'login', 'user', user.id);
     const token = await createToken(user.id, user.role);
 
     const response = NextResponse.json({
       success: true,
       user: { id: user.id, name: user.name, email: user.email, role: user.role },
+      previousLogin,
     });
     response.cookies.set('auth_token', token, {
       httpOnly: true,

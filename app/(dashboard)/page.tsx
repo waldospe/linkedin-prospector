@@ -13,6 +13,7 @@ import {
   Clock,
   TrendingUp,
 } from 'lucide-react';
+import SinceYouWereGone from '@/components/since-you-were-gone';
 
 interface Stats {
   today: {
@@ -89,6 +90,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
+      <SinceYouWereGone />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
