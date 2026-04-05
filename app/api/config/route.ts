@@ -50,6 +50,11 @@ export async function PUT(req: NextRequest) {
     if (data.email_reply_alerts !== undefined) userFields.email_reply_alerts = data.email_reply_alerts ? 1 : 0;
     if (data.digest_send_hour !== undefined) userFields.digest_send_hour = data.digest_send_hour;
 
+    // Mark schedule as confirmed when user saves timezone or send_schedule
+    if (data.timezone !== undefined || data.send_schedule !== undefined) {
+      userFields.onboarding_schedule_confirmed = 1;
+    }
+
     if (Object.keys(userFields).length > 0) {
       users.update(userId, userFields);
     }

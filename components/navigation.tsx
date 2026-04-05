@@ -23,6 +23,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useUser } from '@/components/user-context';
 import { useTheme } from '@/components/theme-provider';
+import { OnboardingSidebar } from '@/components/onboarding-tracker';
 
 const navItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -120,6 +121,9 @@ export default function Navigation() {
           )}
         </div>
       )}
+
+      {/* Onboarding tracker */}
+      <OnboardingSidebar />
 
       {/* Nav links */}
       <div className="flex-1 space-y-0.5 relative">

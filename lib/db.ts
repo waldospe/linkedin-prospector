@@ -47,7 +47,7 @@ function initDb() {
       db.exec(`DROP TABLE IF EXISTS ${t}`);
     }
     db.exec('DELETE FROM schema_version');
-    db.exec('INSERT INTO schema_version (version) VALUES (11)');
+    db.exec('INSERT INTO schema_version (version) VALUES (12)');
   }
 
   if (currentVersion >= 2 && currentVersion < 4) {
@@ -161,6 +161,17 @@ function initDb() {
     db.exec('UPDATE schema_version SET version = 11');
   }
 
+  if (currentVersion === 11) {
+    const uCols = db.pragma('table_info(users)') as any[];
+    if (uCols && !uCols.find((c: any) => c.name === 'onboarding_schedule_confirmed')) {
+      db.exec(`ALTER TABLE users ADD COLUMN onboarding_schedule_confirmed INTEGER DEFAULT 0`);
+    }
+    if (uCols && !uCols.find((c: any) => c.name === 'onboarding_dismissed')) {
+      db.exec(`ALTER TABLE users ADD COLUMN onboarding_dismissed INTEGER DEFAULT 0`);
+    }
+    db.exec('UPDATE schema_version SET version = 12');
+  }
+
   // Activity log
   db.exec(`
     CREATE TABLE IF NOT EXISTS activity_log (
@@ -206,6 +217,8 @@ function initDb() {
       email_reply_alerts INTEGER DEFAULT 1,
       digest_send_hour INTEGER DEFAULT 8,
       last_digest_sent DATE,
+      onboarding_schedule_confirmed INTEGER DEFAULT 0,
+      onboarding_dismissed INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
@@ -419,6 +432,7 @@ export const users = {
       SELECT id, name, email, role, team_id, unipile_account_id, pipedrive_api_key,
              daily_limit, message_delay_min, message_delay_max, send_schedule, timezone,
              last_login, email_daily_digest, email_reply_alerts, digest_send_hour, last_digest_sent,
+             onboarding_schedule_confirmed, onboarding_dismissed,
              created_at
       FROM users ORDER BY name
     `).all().map(parseUserSchedule);
@@ -428,6 +442,7 @@ export const users = {
       SELECT id, name, email, role, team_id, unipile_account_id, pipedrive_api_key,
              daily_limit, message_delay_min, message_delay_max, send_schedule, timezone,
              last_login, email_daily_digest, email_reply_alerts, digest_send_hour, last_digest_sent,
+             onboarding_schedule_confirmed, onboarding_dismissed,
              created_at
       FROM users WHERE id = ?
     `).get(id);
