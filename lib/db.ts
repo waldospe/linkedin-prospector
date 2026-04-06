@@ -169,6 +169,10 @@ function initDb() {
     if (uCols && !uCols.find((c: any) => c.name === 'onboarding_dismissed')) {
       db.exec(`ALTER TABLE users ADD COLUMN onboarding_dismissed INTEGER DEFAULT 0`);
     }
+    const tCols = db.pragma('table_info(teams)') as any[];
+    if (tCols && !tCols.find((c: any) => c.name === 'max_seats')) {
+      db.exec(`ALTER TABLE teams ADD COLUMN max_seats INTEGER`);
+    }
     db.exec('UPDATE schema_version SET version = 12');
   }
 
@@ -190,6 +194,7 @@ function initDb() {
     CREATE TABLE IF NOT EXISTS teams (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE,
+      max_seats INTEGER,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
@@ -422,19 +427,24 @@ function seedData() {
 export const teams = {
   getAll: () => getDb().prepare('SELECT * FROM teams ORDER BY name').all(),
   getById: (id: number) => getDb().prepare('SELECT * FROM teams WHERE id = ?').get(id),
-  create: (name: string) => getDb().prepare('INSERT INTO teams (name) VALUES (?)').run(name),
+  create: (name: string, maxSeats?: number) => getDb().prepare('INSERT INTO teams (name, max_seats) VALUES (?, ?)').run(name, maxSeats || null),
+  getSeatCount: (teamId: number) => {
+    const row = getDb().prepare('SELECT COUNT(*) as count FROM users WHERE team_id = ?').get(teamId) as any;
+    return row?.count || 0;
+  },
 };
 
 // Users
 export const users = {
   getAll: () => {
     return getDb().prepare(`
-      SELECT id, name, email, role, team_id, unipile_account_id, pipedrive_api_key,
-             daily_limit, message_delay_min, message_delay_max, send_schedule, timezone,
-             last_login, email_daily_digest, email_reply_alerts, digest_send_hour, last_digest_sent,
-             onboarding_schedule_confirmed, onboarding_dismissed,
-             created_at
-      FROM users ORDER BY name
+      SELECT u.id, u.name, u.email, u.role, u.team_id, u.unipile_account_id, u.pipedrive_api_key,
+             u.daily_limit, u.message_delay_min, u.message_delay_max, u.send_schedule, u.timezone,
+             u.last_login, u.email_daily_digest, u.email_reply_alerts, u.digest_send_hour, u.last_digest_sent,
+             u.onboarding_schedule_confirmed, u.onboarding_dismissed,
+             u.created_at, t.name as team_name
+      FROM users u LEFT JOIN teams t ON u.team_id = t.id
+      ORDER BY t.name, u.name
     `).all().map(parseUserSchedule);
   },
   getById: (id: number) => {

@@ -105,10 +105,23 @@ export default function Navigation() {
             className="w-full h-8 bg-secondary text-foreground text-[12px] font-medium rounded-lg px-2.5 border border-border focus:outline-none focus:border-blue-500/40 focus:ring-1 focus:ring-blue-500/20 cursor-pointer transition-all"
           >
             <option value="self">{currentUser.name} (You)</option>
-            <option value="all">All Team</option>
-            {teamUsers.filter(u => u.id !== currentUser.id).map(u => (
-              <option key={u.id} value={u.id}>{u.name}</option>
-            ))}
+            <option value="all">All Users</option>
+            {(() => {
+              const grouped = new Map<string, typeof teamUsers>();
+              teamUsers.filter(u => u.id !== currentUser.id).forEach(u => {
+                const key = String((u as any).team_id || 'none');
+                if (!grouped.has(key)) grouped.set(key, []);
+                grouped.get(key)!.push(u);
+              });
+              return Array.from(grouped.entries()).map(([teamId, members]) => {
+                const teamName = members[0] && (members[0] as any).team_name;
+                return (
+                  <optgroup key={teamId} label={teamName || 'No Team'}>
+                    {members.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                  </optgroup>
+                );
+              });
+            })()}
           </select>
           {viewAs !== null && (
             <div className={`mt-2 text-[10px] font-semibold px-2.5 py-1.5 rounded-lg ${
