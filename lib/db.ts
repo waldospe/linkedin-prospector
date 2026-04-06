@@ -47,7 +47,7 @@ function initDb() {
       db.exec(`DROP TABLE IF EXISTS ${t}`);
     }
     db.exec('DELETE FROM schema_version');
-    db.exec('INSERT INTO schema_version (version) VALUES (12)');
+    db.exec('INSERT INTO schema_version (version) VALUES (13)');
   }
 
   if (currentVersion >= 2 && currentVersion < 4) {
@@ -174,6 +174,14 @@ function initDb() {
       db.exec(`ALTER TABLE teams ADD COLUMN max_seats INTEGER`);
     }
     db.exec('UPDATE schema_version SET version = 12');
+  }
+
+  if (currentVersion === 12) {
+    const tCols = db.pragma('table_info(teams)') as any[];
+    if (tCols && !tCols.find((c: any) => c.name === 'max_seats')) {
+      db.exec(`ALTER TABLE teams ADD COLUMN max_seats INTEGER`);
+    }
+    db.exec('UPDATE schema_version SET version = 13');
   }
 
   // Activity log
