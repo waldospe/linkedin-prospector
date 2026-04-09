@@ -269,26 +269,35 @@ export async function POST(req: NextRequest) {
 
           processed.push(item.id);
 
-          // Schedule next sequence step
-          if (item.sequence_id && item.sequence_steps) {
+          // Schedule next sequence step — but ONLY if current step was a message.
+          // If current step was a connection request, the follow-up message should NOT be
+          // queued until the connection is accepted. The monitorContacts() function handles
+          // that by detecting acceptance and queuing the next step at that time.
+          if (item.sequence_id && item.sequence_steps && item.action_type === 'message') {
             const steps = typeof item.sequence_steps === 'string' ? JSON.parse(item.sequence_steps) : item.sequence_steps;
             const nextStepIdx = item.step_number;
             if (nextStepIdx < steps.length) {
-              const nextStep = steps[nextStepIdx];
-              const delayMs = (nextStep.delay_hours || 0) * 60 * 60 * 1000;
-              const scheduledAt = new Date(Date.now() + delayMs).toISOString();
-              const nextMessage = nextStep.template
-                ? substituteVariables(nextStep.template, contact)
-                : '';
+              // Dedup: don't create if one already exists
+              const existingNext = getDb().prepare(
+                "SELECT id FROM queue WHERE user_id = ? AND contact_id = ? AND step_number = ? AND status = 'pending'"
+              ).get(user.id, item.contact_id, item.step_number + 1);
+              if (!existingNext) {
+                const nextStep = steps[nextStepIdx];
+                const delayMs = (nextStep.delay_hours || 0) * 60 * 60 * 1000;
+                const scheduledAt = new Date(Date.now() + delayMs).toISOString();
+                const nextMessage = nextStep.template
+                  ? substituteVariables(nextStep.template, contact)
+                  : '';
 
-              queue.create(user.id, {
-                contact_id: item.contact_id,
-                sequence_id: item.sequence_id,
-                step_number: item.step_number + 1,
-                action_type: nextStep.action,
-                message_text: nextMessage,
-                scheduled_at: scheduledAt,
-              });
+                queue.create(user.id, {
+                  contact_id: item.contact_id,
+                  sequence_id: item.sequence_id,
+                  step_number: item.step_number + 1,
+                  action_type: nextStep.action,
+                  message_text: nextMessage,
+                  scheduled_at: scheduledAt,
+                });
+              }
             }
           }
 
