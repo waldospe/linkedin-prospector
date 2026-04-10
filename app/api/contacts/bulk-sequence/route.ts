@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getEffectiveUser } from '@/lib/api-auth';
-import { contacts, sequences, queue, users } from '@/lib/db';
+import { sequences, users, getDb } from '@/lib/db';
 import { substituteVariables } from '@/lib/constants';
 
 export const dynamic = 'force-dynamic';
@@ -37,45 +37,58 @@ export async function POST(req: NextRequest) {
     // Shuffle IDs for randomization
     const shuffledIds = [...ids].sort(() => Math.random() - 0.5);
 
-    let queued = 0;
-    for (let i = 0; i < shuffledIds.length; i++) {
-      const contactId = shuffledIds[i];
-      const c = contacts.getById(contactId, userId!) as any;
-      if (!c) continue;
+    const db = getDb();
+    const queueAfter = db.prepare(`
+      INSERT INTO queue (user_id, contact_id, sequence_id, step_number, action_type, message_text, scheduled_at, template_variant)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const updateContactStatus = db.prepare(`UPDATE contacts SET status = ? WHERE id = ? AND user_id = ?`);
+    const getContact = db.prepare(`SELECT * FROM contacts WHERE id = ? AND user_id = ?`);
 
-      // A/B testing: if step has variants, randomly pick one
-      let messageText = '';
-      let variantLabel: string | undefined;
-      const step = steps[0];
-      if (step.variants && Array.isArray(step.variants) && step.variants.length > 0) {
-        const variant = step.variants[Math.floor(Math.random() * step.variants.length)];
-        messageText = variant.template ? substituteVariables(variant.template, c) : '';
-        variantLabel = variant.label || `V${step.variants.indexOf(variant) + 1}`;
-      } else {
-        messageText = step.template ? substituteVariables(step.template, c) : '';
+    const queueAll = db.transaction((idList: number[]) => {
+      let queued = 0;
+      for (let i = 0; i < idList.length; i++) {
+        const contactId = idList[i];
+        const c = getContact.get(contactId, userId!) as any;
+        if (!c) continue;
+
+        // A/B testing: if step has variants, randomly pick one
+        let messageText = '';
+        let variantLabel: string | undefined;
+        const step = steps[0];
+        if (step.variants && Array.isArray(step.variants) && step.variants.length > 0) {
+          const variant = step.variants[Math.floor(Math.random() * step.variants.length)];
+          messageText = variant.template ? substituteVariables(variant.template, c) : '';
+          variantLabel = variant.label || `V${step.variants.indexOf(variant) + 1}`;
+        } else {
+          messageText = step.template ? substituteVariables(step.template, c) : '';
+        }
+
+        // Spread across days with random jitter
+        const dayOffset = Math.floor(i / dailyLimit);
+        const positionInDay = i % dailyLimit;
+        const minuteOffset = Math.floor((positionInDay / dailyLimit) * windowMinutes) + Math.floor(Math.random() * 15);
+        const scheduledAt = new Date();
+        scheduledAt.setDate(scheduledAt.getDate() + dayOffset);
+        scheduledAt.setHours(startHour, minuteOffset, Math.floor(Math.random() * 60), 0);
+
+        queueAfter.run(
+          userId!,
+          contactId,
+          sequence_id,
+          1,
+          step.action,
+          messageText || null,
+          scheduledAt.toISOString(),
+          variantLabel || null,
+        );
+        updateContactStatus.run('queued', contactId, userId!);
+        queued++;
       }
+      return queued;
+    });
 
-      // Spread across days with random jitter
-      const dayOffset = Math.floor(i / dailyLimit);
-      const positionInDay = i % dailyLimit;
-      const minuteOffset = Math.floor((positionInDay / dailyLimit) * windowMinutes) + Math.floor(Math.random() * 15);
-      const scheduledAt = new Date();
-      scheduledAt.setDate(scheduledAt.getDate() + dayOffset);
-      scheduledAt.setHours(startHour, minuteOffset, Math.floor(Math.random() * 60), 0);
-
-      queue.create(userId!, {
-        contact_id: contactId,
-        sequence_id: sequence_id,
-        step_number: 1,
-        action_type: step.action,
-        message_text: messageText,
-        scheduled_at: scheduledAt.toISOString(),
-        template_variant: variantLabel,
-      });
-      contacts.updateStatus(contactId, 'queued', userId!);
-      queued++;
-    }
-
+    const queued = queueAll(shuffledIds);
     return NextResponse.json({ queued, total: ids.length });
   } catch (error: any) {
     console.error('BULK SEQUENCE ERROR:', error.message);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import {
   Dialog,
@@ -63,7 +63,6 @@ export default function ContactsPage() {
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
-  const [filterSource, setFilterSource] = useState('all');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [editingContact, setEditingContact] = useState<number | null>(null);
   const [editData, setEditData] = useState<Record<string, string>>({});
@@ -403,9 +402,6 @@ export default function ContactsPage() {
     setSheetsUrl('');
   };
 
-  // Filtering
-  const sources = useMemo(() => Array.from(new Set(contacts.map(c => c.source).filter(Boolean))), [contacts]);
-
   // Server-side pagination handles filtering — contacts is already the current page
   const filtered = contacts;
 
@@ -421,14 +417,32 @@ export default function ContactsPage() {
     Object.values(importState.mapping).includes('name')
   );
 
-  const allFilteredSelected = filtered.length > 0 && filtered.every(c => selectedIds.has(c.id));
+  const [selectingAll, setSelectingAll] = useState(false);
+  const allMatchingSelected = totalContacts > 0 && selectedIds.size === totalContacts;
   const someSelected = selectedIds.size > 0;
 
-  const toggleSelectAll = () => {
-    if (allFilteredSelected) {
+  const toggleSelectAll = async () => {
+    if (allMatchingSelected || someSelected) {
       setSelectedIds(new Set());
-    } else {
+      return;
+    }
+    // If only one page, just select what's loaded
+    if (totalContacts <= filtered.length) {
       setSelectedIds(new Set(filtered.map(c => c.id)));
+      return;
+    }
+    // Otherwise fetch all matching IDs across pages
+    setSelectingAll(true);
+    try {
+      const sep = apiQuery.includes('?') ? '&' : '?';
+      const params = `ids_only=1${filterStatus !== 'all' ? `&status=${filterStatus}` : ''}${search ? `&search=${encodeURIComponent(search)}` : ''}${filterLabelIds.length > 0 ? `&label_ids=${filterLabelIds.join(',')}` : ''}`;
+      const res = await fetch(`/api/contacts${apiQuery}${sep}${params}`);
+      const data = await res.json();
+      if (Array.isArray(data.ids)) {
+        setSelectedIds(new Set(data.ids));
+      }
+    } finally {
+      setSelectingAll(false);
     }
   };
 
@@ -546,12 +560,6 @@ export default function ContactsPage() {
           <option value="all">All Stages</option>
           {FUNNEL_STAGES.map(s => (<option key={s.key} value={s.key}>{s.label}</option>))}
         </select>
-        {sources.length > 1 && (
-          <select value={filterSource} onChange={(e) => setFilterSource(e.target.value)} className="h-9 bg-card/50 text-foreground text-xs rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50">
-            <option value="all">All Sources</option>
-            {sources.map(s => (<option key={s} value={s}>{s}</option>))}
-          </select>
-        )}
         {allLabels.length > 0 && (
           <select
             value={filterLabelIds.length === 1 ? String(filterLabelIds[0]) : ''}
@@ -562,8 +570,8 @@ export default function ContactsPage() {
             {allLabels.map(l => (<option key={l.id} value={l.id}>{l.name}</option>))}
           </select>
         )}
-        {(filterStatus !== 'all' || filterSource !== 'all' || filterLabelIds.length > 0) && (
-          <button onClick={() => { setFilterStatus('all'); setFilterSource('all'); setFilterLabelIds([]); }} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+        {(filterStatus !== 'all' || filterLabelIds.length > 0) && (
+          <button onClick={() => { setFilterStatus('all'); setFilterLabelIds([]); }} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
             Clear
           </button>
         )}
@@ -633,8 +641,17 @@ export default function ContactsPage() {
         <div className="space-y-1.5">
           {/* Select all header */}
           <div className="flex items-center gap-3 px-4 py-1.5">
-            <input type="checkbox" checked={allFilteredSelected} onChange={toggleSelectAll} className="w-4 h-4 rounded border-border bg-background accent-blue-600 cursor-pointer" />
-            <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Select all</span>
+            <input
+              type="checkbox"
+              checked={allMatchingSelected}
+              ref={el => { if (el) el.indeterminate = someSelected && !allMatchingSelected; }}
+              onChange={toggleSelectAll}
+              disabled={selectingAll}
+              className="w-4 h-4 rounded border-border bg-background accent-blue-600 cursor-pointer disabled:opacity-50"
+            />
+            <span className="text-[11px] text-muted-foreground uppercase tracking-wider">
+              {selectingAll ? `Selecting all ${totalContacts}…` : someSelected ? `${selectedIds.size} of ${totalContacts} selected` : `Select all ${totalContacts}`}
+            </span>
           </div>
           {filtered.map((contact) => {
             const cfg = getStatusDisplay(contact.status);

@@ -616,6 +616,24 @@ export const contacts = {
 
     return { rows, total: total.count };
   },
+  getMatchingIds: (userId: number, opts: { status?: string; search?: string; labelIds?: number[] }) => {
+    let where = 'WHERE c.user_id = ?';
+    const whereParams: any[] = [userId];
+    if (opts.status && opts.status !== 'all') { where += ' AND c.status = ?'; whereParams.push(opts.status); }
+    if (opts.search) { where += ' AND (c.name LIKE ? OR c.first_name LIKE ? OR c.last_name LIKE ? OR c.company LIKE ? OR c.title LIKE ?)'; const s = `%${opts.search}%`; whereParams.push(s, s, s, s, s); }
+
+    let labelJoin = '';
+    const labelParams: any[] = [];
+    if (opts.labelIds && opts.labelIds.length > 0) {
+      const placeholders = opts.labelIds.map(() => '?').join(',');
+      labelJoin = `INNER JOIN contact_labels clf ON clf.contact_id = c.id AND clf.label_id IN (${placeholders})`;
+      labelParams.push(...opts.labelIds);
+    }
+
+    const params = [...labelParams, ...whereParams];
+    const rows = getDb().prepare(`SELECT DISTINCT c.id FROM contacts c ${labelJoin} ${where}`).all(...params) as Array<{ id: number }>;
+    return rows.map(r => r.id);
+  },
   getAllTeam: (teamId?: number) => {
     return getDb().prepare(`
       SELECT c.*, u.name as user_name FROM contacts c

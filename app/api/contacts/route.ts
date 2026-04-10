@@ -13,6 +13,15 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get('search') || undefined;
     const labelIdsParam = searchParams.get('label_ids');
     const labelIds = labelIdsParam ? labelIdsParam.split(',').map(Number).filter(n => !isNaN(n)) : undefined;
+    const idsOnly = searchParams.get('ids_only') === '1';
+
+    if (idsOnly) {
+      if (!effectiveUserId) {
+        return NextResponse.json({ ids: [] });
+      }
+      const ids = contacts.getMatchingIds(effectiveUserId, { status, search, labelIds });
+      return NextResponse.json({ ids });
+    }
 
     if (isAll) {
       const user = users.getById(userId) as any;
