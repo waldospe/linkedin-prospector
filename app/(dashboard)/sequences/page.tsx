@@ -14,6 +14,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { Plus, Trash2, Edit2, GitBranch, ArrowRight, Tag, Lock, Users as UsersIcon, Globe } from 'lucide-react';
 import { useUser } from '@/components/user-context';
+import { FUNNEL_STAGES, stageColors, STAGE_MAP } from '@/lib/constants';
 
 interface Variant {
   label: string;
@@ -35,6 +36,13 @@ const AVAILABLE_VARS = [
   { key: 'title', label: 'Title' },
 ];
 
+interface SequenceStats {
+  totalContacts: number;
+  byStage: Record<string, number>;
+  queueCompleted: number;
+  queueTotal: number;
+}
+
 interface Sequence {
   id: number;
   name: string;
@@ -44,6 +52,7 @@ interface Sequence {
   owner_name?: string;
   visibility: string;
   shared_with_user_ids: string;
+  stats?: SequenceStats;
 }
 
 export default function SequencesPage() {
@@ -412,6 +421,68 @@ export default function SequencesPage() {
                   </div>
                 ))}
               </div>
+
+              {seq.stats && seq.stats.totalContacts > 0 && (() => {
+                const stats = seq.stats;
+                const pct = stats.queueTotal > 0 ? Math.round((stats.queueCompleted / stats.queueTotal) * 100) : 0;
+                const stagesWithCounts = FUNNEL_STAGES.filter(s => (stats.byStage[s.key] || 0) > 0);
+                return (
+                  <div className="mt-4 pt-4 border-t border-border/50 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-sm font-medium text-foreground">{stats.totalContacts.toLocaleString()}</span>
+                        <span className="text-xs text-muted-foreground">contacts</span>
+                      </div>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-xs text-muted-foreground">{stats.queueCompleted.toLocaleString()} / {stats.queueTotal.toLocaleString()} sent</span>
+                        <span className={`text-sm font-medium ${pct === 100 ? 'text-emerald-400' : 'text-blue-400'}`}>{pct}%</span>
+                      </div>
+                    </div>
+                    <div className="h-1.5 w-full bg-secondary/50 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full transition-all ${pct === 100 ? 'bg-emerald-500' : 'bg-blue-500'}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    {/* Stage segmented bar */}
+                    {stats.totalContacts > 0 && (
+                      <div className="flex h-2 w-full rounded-full overflow-hidden bg-secondary/50">
+                        {stagesWithCounts.map(s => {
+                          const cnt = stats.byStage[s.key] || 0;
+                          const w = (cnt / stats.totalContacts) * 100;
+                          return (
+                            <div
+                              key={s.key}
+                              className={stageColors[s.key]?.bar || 'bg-zinc-500'}
+                              style={{ width: `${w}%` }}
+                              title={`${s.label}: ${cnt}`}
+                            />
+                          );
+                        })}
+                      </div>
+                    )}
+                    {/* Stage chips */}
+                    <div className="flex flex-wrap gap-1.5">
+                      {stagesWithCounts.map(s => {
+                        const cnt = stats.byStage[s.key] || 0;
+                        const stagePct = Math.round((cnt / stats.totalContacts) * 100);
+                        const colors = stageColors[s.key];
+                        return (
+                          <div
+                            key={s.key}
+                            className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-1 rounded-md border border-border/50 ${colors?.bg || ''}`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${colors?.dot || 'bg-zinc-400'}`} />
+                            <span className={colors?.text || 'text-muted-foreground'}>{STAGE_MAP[s.key]?.label || s.key}</span>
+                            <span className="text-foreground">{cnt.toLocaleString()}</span>
+                            <span className="text-muted-foreground">{stagePct}%</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           ))}
         </div>

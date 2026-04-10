@@ -788,6 +788,48 @@ export const sequences = {
     getDb().prepare('DELETE FROM sequences WHERE id = ?').run(id);
     return true;
   },
+  getStatsForSequences: (userId: number, seqIds: number[]) => {
+    const stats: Record<number, { totalContacts: number; byStage: Record<string, number>; queueCompleted: number; queueTotal: number }> = {};
+    for (const id of seqIds) stats[id] = { totalContacts: 0, byStage: {}, queueCompleted: 0, queueTotal: 0 };
+    if (seqIds.length === 0) return stats;
+
+    const placeholders = seqIds.map(() => '?').join(',');
+
+    // Stage breakdown: distinct contacts per (sequence, status)
+    const stageRows = getDb().prepare(`
+      SELECT q.sequence_id, c.status, COUNT(DISTINCT c.id) as cnt
+      FROM queue q
+      JOIN contacts c ON c.id = q.contact_id
+      WHERE q.sequence_id IN (${placeholders}) AND q.user_id = ?
+      GROUP BY q.sequence_id, c.status
+    `).all(...seqIds, userId) as Array<{ sequence_id: number; status: string; cnt: number }>;
+
+    for (const row of stageRows) {
+      const s = stats[row.sequence_id];
+      if (!s) continue;
+      s.byStage[row.status] = row.cnt;
+      s.totalContacts += row.cnt;
+    }
+
+    // Queue progress per sequence (excludes paused, since paused work isn't pending toward "done")
+    const progressRows = getDb().prepare(`
+      SELECT sequence_id,
+        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
+        COUNT(*) as total
+      FROM queue
+      WHERE sequence_id IN (${placeholders}) AND user_id = ?
+      GROUP BY sequence_id
+    `).all(...seqIds, userId) as Array<{ sequence_id: number; completed: number; total: number }>;
+
+    for (const row of progressRows) {
+      const s = stats[row.sequence_id];
+      if (!s) continue;
+      s.queueCompleted = row.completed;
+      s.queueTotal = row.total;
+    }
+
+    return stats;
+  },
 };
 
 // Queue (scoped to user)

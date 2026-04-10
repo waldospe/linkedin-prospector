@@ -5,10 +5,12 @@ import { sequences, activityLog } from '@/lib/db';
 export async function GET(req: NextRequest) {
   try {
     const { effectiveUserId } = getEffectiveUser(req);
-    const allSequences = sequences.getAll(effectiveUserId!);
+    const allSequences = sequences.getAll(effectiveUserId!) as any[];
+    const stats = sequences.getStatsForSequences(effectiveUserId!, allSequences.map(s => s.id));
     const parsed = allSequences.map((s: any) => ({
       ...s,
       steps: typeof s.steps === 'string' ? JSON.parse(s.steps) : s.steps,
+      stats: stats[s.id] || { totalContacts: 0, byStage: {}, queueCompleted: 0, queueTotal: 0 },
     }));
     return NextResponse.json(parsed);
   } catch (error) {
