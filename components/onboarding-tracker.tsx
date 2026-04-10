@@ -52,6 +52,19 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     refresh();
   }, [pathname]);
 
+  // Refresh whenever the tab regains focus, so users who save settings
+  // and switch back see an up-to-date setup percentage.
+  useEffect(() => {
+    const onFocus = () => refresh();
+    const onVisibility = () => { if (document.visibilityState === 'visible') refresh(); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, []);
+
   // Show intro modal once on first load if new user hasn't dismissed it
   useEffect(() => {
     if (!state || state.dismissed || state.allDone || hasShownIntro) return;

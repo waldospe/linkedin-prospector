@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { useUser } from '@/components/user-context';
+import { useOnboarding } from '@/components/onboarding-tracker';
 import { Save, Key, Clock, Shield, Lock, CheckCircle2, Globe, Calendar, Linkedin, Eye, EyeOff, Mail } from 'lucide-react';
 
 const TIMEZONES = [
@@ -62,6 +63,7 @@ const defaultSchedule: Record<string, SendDay> = {
 
 export default function SettingsPage() {
   const { isAdmin, currentUser } = useUser();
+  const { refresh: refreshOnboarding } = useOnboarding();
   const [config, setConfig] = useState<Config>({
     pipedrive_api_key: '',
     daily_limit: 20,
@@ -105,6 +107,7 @@ export default function SettingsPage() {
         body: JSON.stringify(config),
       });
       setMessage('Settings saved successfully');
+      refreshOnboarding();
     } catch {
       setMessage('Failed to save settings');
     } finally {

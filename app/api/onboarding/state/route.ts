@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getUserFromRequest } from '@/lib/api-auth';
 import { users, getDb } from '@/lib/db';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: NextRequest) {
   try {
     const { userId } = getUserFromRequest(req);
@@ -13,8 +15,13 @@ export async function GET(req: NextRequest) {
     // Step 1: LinkedIn connected (unipile_account_id is set and not pending)
     const linkedinConnected = !!user.unipile_account_id && user.unipile_account_id !== 'pending';
 
-    // Step 2: User has explicitly confirmed their schedule + timezone
-    const scheduleSet = !!user.onboarding_schedule_confirmed;
+    // Step 2: Schedule is set — accept either the explicit confirmation flag, or
+    // any non-empty send_schedule + timezone (data-driven fallback so we don't
+    // depend on a side-effect flag that could be missed by older save paths).
+    const hasScheduleData = !!(user.send_schedule && (typeof user.send_schedule === 'object'
+      ? Object.keys(user.send_schedule).length > 0
+      : String(user.send_schedule).length > 2));
+    const scheduleSet = !!user.onboarding_schedule_confirmed || (hasScheduleData && !!user.timezone);
 
     // Step 3: Has contacts (at least 1)
     const contactCount = db.prepare('SELECT COUNT(*) as count FROM contacts WHERE user_id = ?').get(userId) as any;
