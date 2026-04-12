@@ -10,12 +10,14 @@ import {
   DialogTrigger
 } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Trash2, Upload, ExternalLink, Search, Users, FileSpreadsheet, Link2, CheckCircle2, AlertCircle, ArrowRight, Filter, GitBranch, AlertTriangle, Edit2, Save, Pause, Play, Ban, Tag } from 'lucide-react';
+import { Plus, Trash2, Upload, ExternalLink, Search, Users, FileSpreadsheet, Link2, CheckCircle2, AlertCircle, ArrowRight, Filter, GitBranch, AlertTriangle, Edit2, Save, Pause, Play, Ban, Tag, MoreHorizontal } from 'lucide-react';
 import { FUNNEL_STAGES, stageColors, STAGE_MAP } from '@/lib/constants';
 import { useUser } from '@/components/user-context';
 import ContactDetail from '@/components/contact-detail';
 import LabelBadge from '@/components/label-badge';
 import LabelPicker from '@/components/label-picker';
+import { EmptyState } from '@/components/empty-state';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 
 interface Contact {
   id: number;
@@ -578,9 +580,9 @@ export default function ContactsPage() {
         <span className="text-xs text-muted-foreground">{totalContacts} total</span>
       </div>
 
-      {/* Bulk actions bar */}
+      {/* Bulk actions bar — sticky so it stays visible while scrolling long lists */}
       {someSelected && (
-        <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-blue-500/10 border border-blue-500/15 animate-fade-in">
+        <div className="sticky top-3 z-30 flex items-center gap-3 px-4 py-3 rounded-xl bg-blue-500/[0.12] border border-blue-500/25 backdrop-blur-md shadow-lg shadow-blue-500/5 animate-fade-in">
           <span className="text-sm text-blue-400 font-medium">{selectedIds.size} selected</span>
           <div className="h-4 w-px bg-border" />
           {sequencesList.length > 0 && (
@@ -633,10 +635,29 @@ export default function ContactsPage() {
           {[...Array(5)].map((_, i) => <div key={i} className="h-16 bg-secondary rounded-xl animate-pulse" />)}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="py-16 text-center">
-          <Users className="w-10 h-10 text-muted-foreground/20 mx-auto mb-3" />
-          <p className="text-muted-foreground">{search || filterStatus !== 'all' ? 'No contacts match your filters' : 'No contacts yet'}</p>
-        </div>
+        search || filterStatus !== 'all' || filterLabelIds.length > 0 ? (
+          <EmptyState
+            icon={Search}
+            title="No contacts match your filters"
+            description="Try clearing the search or stage filter."
+            action={
+              <button onClick={() => { setSearchInput(''); setFilterStatus('all'); setFilterLabelIds([]); }} className="text-sm text-blue-400 hover:text-blue-300 font-medium">
+                Clear filters
+              </button>
+            }
+          />
+        ) : (
+          <EmptyState
+            icon={Users}
+            title="No contacts yet"
+            description="Import a CSV, paste a Google Sheets URL, or add a single LinkedIn profile to get started."
+            action={
+              <button onClick={() => { resetImport(); setShowImport(true); }} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 transition-all">
+                <Upload size={14} /> Import contacts
+              </button>
+            }
+          />
+        )
       ) : (
         <div className="space-y-1.5">
           {/* Select all header */}
@@ -708,20 +729,7 @@ export default function ContactsPage() {
                         {sequencesList.map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}
                       </select>
                     ) : null}
-                    {contact.status === 'queued' && (
-                      <button onClick={() => pauseContact(contact.id)} className="p-1 rounded-md text-muted-foreground hover:text-amber-400 hover:bg-amber-500/10 transition-all" title="Pause">
-                        <Pause size={12} />
-                      </button>
-                    )}
-                    {contact.status === 'queued' && (
-                      <button onClick={() => markOptedOut(contact.id)} className="p-1 rounded-md text-muted-foreground hover:text-rose-400 hover:bg-rose-500/10 transition-all" title="Mark opted out">
-                        <Ban size={12} />
-                      </button>
-                    )}
                     <div className="relative">
-                      <button onClick={() => setLabelPickerContact(labelPickerContact === contact.id ? null : contact.id)} className="p-1 rounded-md text-muted-foreground hover:text-blue-400 hover:bg-blue-500/10 transition-all" title="Labels">
-                        <Tag size={12} />
-                      </button>
                       {labelPickerContact === contact.id && (
                         <div className="absolute right-0 top-8 z-50">
                           <LabelPicker
@@ -734,12 +742,33 @@ export default function ContactsPage() {
                         </div>
                       )}
                     </div>
-                    <button onClick={() => isEditing ? setEditingContact(null) : startEditContact(contact)} className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-all" title="Edit">
-                      <Edit2 size={12} />
-                    </button>
-                    <button onClick={() => deleteContact(contact.id)} className="p-1 rounded-md text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-all" title="Delete">
-                      <Trash2 size={12} />
-                    </button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-all" title="Actions">
+                        <MoreHorizontal size={14} />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => startEditContact(contact)}>
+                          <Edit2 size={13} /> Edit details
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setLabelPickerContact(contact.id)}>
+                          <Tag size={13} /> Manage labels
+                        </DropdownMenuItem>
+                        {contact.status === 'queued' && (
+                          <DropdownMenuItem onClick={() => pauseContact(contact.id)}>
+                            <Pause size={13} /> Pause sequence
+                          </DropdownMenuItem>
+                        )}
+                        {contact.status === 'queued' && (
+                          <DropdownMenuItem onClick={() => markOptedOut(contact.id)}>
+                            <Ban size={13} /> Mark opted out
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem variant="destructive" onClick={() => deleteContact(contact.id)}>
+                          <Trash2 size={13} /> Delete contact
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </div>
                 {/* Inline edit */}
@@ -824,6 +853,29 @@ export default function ContactsPage() {
               {importState.step === 'importing' && 'Importing...'}
               {importState.step === 'done' && 'Import Complete'}
             </DialogTitle>
+            {/* Progress indicator */}
+            {(() => {
+              const stepOrder: ImportStep[] = ['choose', 'mapping', 'importing', 'done'];
+              const currentIdx = stepOrder.indexOf(importState.step);
+              const effectiveIdx = importState.step === 'csv-upload' || importState.step === 'sheets-url' ? 0 : currentIdx;
+              return (
+                <div className="flex items-center gap-1.5 mt-2">
+                  {['Source', 'Map', 'Import', 'Done'].map((label, i) => (
+                    <div key={label} className="flex items-center gap-1.5">
+                      <div className={`w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center transition-all ${
+                        i < effectiveIdx ? 'bg-emerald-500/20 text-emerald-400'
+                          : i === effectiveIdx ? 'bg-blue-500/20 text-blue-400 ring-1 ring-blue-500/30'
+                          : 'bg-secondary text-muted-foreground'
+                      }`}>
+                        {i < effectiveIdx ? '✓' : i + 1}
+                      </div>
+                      <span className={`text-[11px] font-medium ${i === effectiveIdx ? 'text-foreground' : 'text-muted-foreground'}`}>{label}</span>
+                      {i < 3 && <div className={`w-6 h-px ${i < effectiveIdx ? 'bg-emerald-500/40' : 'bg-border'}`} />}
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
           </DialogHeader>
 
           {importState.error && (
@@ -894,11 +946,14 @@ export default function ContactsPage() {
                       <ArrowRight size={14} className="text-muted-foreground shrink-0" />
                       <select value={importState.mapping[header] || ''} onChange={(e) => setImportState(s => ({ ...s, mapping: { ...s.mapping, [header]: e.target.value } }))} className="flex-1 h-8 bg-background/50 text-foreground text-sm rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50">
                         <option value="">Skip</option>
-                        {importState.validFields.map(f => (
+                        {importState.validFields.map(f => {
+                          const isRequired = ['first_name', 'last_name', 'name', 'linkedin_url'].includes(f);
+                          return (
                           <option key={f} value={f} disabled={usedByOthers.has(f)}>
-                            {importState.fieldLabels[f] || f}{usedByOthers.has(f) ? ' (used)' : ''}
+                            {isRequired ? '★ ' : ''}{importState.fieldLabels[f] || f}{usedByOthers.has(f) ? ' (used)' : ''}
                           </option>
-                        ))}
+                          );
+                        })}
                       </select>
                       {importState.suggestions[header] && importState.mapping[header] === importState.suggestions[header] && (
                         <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />

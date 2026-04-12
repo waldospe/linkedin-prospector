@@ -162,11 +162,21 @@ export default function SettingsPage() {
     );
   }
 
+  const sections: Array<{ key: string; label: string; adminOnly?: boolean }> = [
+    { key: 'account', label: 'Account' },
+    { key: 'sending', label: 'Sending' },
+    { key: 'integrations', label: 'Integrations' },
+    { key: 'notifications', label: 'Notifications' },
+    { key: 'security', label: 'Security' },
+    ...(isAdmin ? [{ key: 'admin', label: 'Admin', adminOnly: true }] : []),
+  ];
+  const [activeSection, setActiveSection] = useState('account');
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 pb-24">
       <div>
-        <h1 className="text-2xl font-semibold text-foreground tracking-tight">Settings</h1>
-        <p className="text-sm text-muted-foreground mt-1">
+        <h1 className="h-page">Settings</h1>
+        <p className="t-meta mt-1">
           {isAdmin ? 'Manage global and personal configuration' : 'Your personal settings'}
         </p>
       </div>
@@ -182,8 +192,55 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* Admin-only: Unipile */}
-      {isAdmin && (
+      <div className="grid grid-cols-12 gap-6">
+        {/* Section nav */}
+        <aside className="col-span-12 md:col-span-3">
+          <nav className="flex md:flex-col gap-1 sticky top-3">
+            {sections.map((s) => (
+              <button
+                key={s.key}
+                onClick={() => setActiveSection(s.key)}
+                className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-all ${
+                  activeSection === s.key
+                    ? 'bg-blue-500/[0.12] text-blue-400 font-medium'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
+                }`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </nav>
+        </aside>
+
+        {/* Section content */}
+        <div className="col-span-12 md:col-span-9 space-y-6">
+
+      {/* ============ ACCOUNT ============ */}
+      {activeSection === 'account' && (<>
+      <div className="glass rounded-xl p-6">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/15 flex items-center justify-center">
+            <Globe size={14} className="text-cyan-400" />
+          </div>
+          <div>
+            <h3 className="h-card">Timezone</h3>
+            <p className="t-caption">Used for your send schedule window</p>
+          </div>
+        </div>
+        <select
+          value={config.timezone}
+          onChange={(e) => setConfig({ ...config, timezone: e.target.value })}
+          className="h-10 bg-background/50 text-foreground text-sm rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50 w-64"
+        >
+          {TIMEZONES.map(tz => (
+            <option key={tz} value={tz}>{tz.replace(/_/g, ' ')}</option>
+          ))}
+        </select>
+      </div>
+      </>)}
+
+      {/* ============ ADMIN ============ */}
+      {activeSection === 'admin' && isAdmin && (
         <div className="glass rounded-xl p-6">
           <div className="flex items-center gap-3 mb-5">
             <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/15 flex items-center justify-center">
@@ -211,14 +268,15 @@ export default function SettingsPage() {
       )}
 
       {/* LinkedIn Connection */}
+      {activeSection === 'account' && (
       <div className="glass rounded-xl p-6">
         <div className="flex items-center gap-3 mb-5">
           <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/15 flex items-center justify-center">
             <Linkedin size={14} className="text-blue-400" />
           </div>
           <div>
-            <h3 className="text-sm font-medium text-foreground">LinkedIn Connection</h3>
-            <p className="text-xs text-muted-foreground">Connect your LinkedIn account for outreach</p>
+            <h3 className="h-card">LinkedIn Connection</h3>
+            <p className="t-caption">Connect your LinkedIn account for outreach</p>
           </div>
         </div>
         {currentUser?.unipile_account_id && currentUser.unipile_account_id !== 'pending' ? (
@@ -248,16 +306,18 @@ export default function SettingsPage() {
           </button>
         )}
       </div>
+      )}
 
       {/* Pipedrive */}
+      {activeSection === 'integrations' && (
       <div className="glass rounded-xl p-6">
         <div className="flex items-center gap-3 mb-5">
           <div className="w-8 h-8 rounded-lg bg-violet-500/10 border border-violet-500/15 flex items-center justify-center">
             <Key size={14} className="text-violet-400" />
           </div>
           <div>
-            <h3 className="text-sm font-medium text-foreground">Pipedrive Integration</h3>
-            <p className="text-xs text-muted-foreground">Your personal API key for contact sync</p>
+            <h3 className="h-card">Pipedrive Integration</h3>
+            <p className="t-caption">Your personal API key for contact sync</p>
           </div>
         </div>
         <div>
@@ -265,30 +325,10 @@ export default function SettingsPage() {
           <Input type="password" value={config.pipedrive_api_key || ''} onChange={(e) => setConfig({ ...config, pipedrive_api_key: e.target.value })} placeholder="Enter your Pipedrive API key..." className="bg-background/50 border-border h-10 max-w-md" />
         </div>
       </div>
-
-      {/* Timezone */}
-      <div className="glass rounded-xl p-6">
-        <div className="flex items-center gap-3 mb-5">
-          <div className="w-8 h-8 rounded-lg bg-cyan-500/10 border border-cyan-500/15 flex items-center justify-center">
-            <Globe size={14} className="text-cyan-400" />
-          </div>
-          <div>
-            <h3 className="text-sm font-medium text-foreground">Timezone</h3>
-            <p className="text-xs text-muted-foreground">Used for your send schedule window</p>
-          </div>
-        </div>
-        <select
-          value={config.timezone}
-          onChange={(e) => setConfig({ ...config, timezone: e.target.value })}
-          className="h-10 bg-background/50 text-foreground text-sm rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50 w-64"
-        >
-          {TIMEZONES.map(tz => (
-            <option key={tz} value={tz}>{tz.replace(/_/g, ' ')}</option>
-          ))}
-        </select>
-      </div>
+      )}
 
       {/* Email Notifications */}
+      {activeSection === 'notifications' && (
       <div className="glass rounded-xl p-6">
         <div className="flex items-center gap-3 mb-5">
           <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/15 flex items-center justify-center">
@@ -341,16 +381,18 @@ export default function SettingsPage() {
           </label>
         </div>
       </div>
+      )}
 
       {/* Send Schedule */}
+      {activeSection === 'sending' && (
       <div className="glass rounded-xl p-6">
         <div className="flex items-center gap-3 mb-5">
           <div className="w-8 h-8 rounded-lg bg-indigo-500/10 border border-indigo-500/15 flex items-center justify-center">
             <Calendar size={14} className="text-indigo-400" />
           </div>
           <div>
-            <h3 className="text-sm font-medium text-foreground">Send Schedule</h3>
-            <p className="text-xs text-muted-foreground">When the queue is allowed to send messages</p>
+            <h3 className="h-card">Send Schedule</h3>
+            <p className="t-caption">When the queue is allowed to send messages</p>
           </div>
         </div>
         <div className="space-y-2">
@@ -394,16 +436,18 @@ export default function SettingsPage() {
           })}
         </div>
       </div>
+      )}
 
       {/* Daily limits */}
+      {activeSection === 'sending' && (
       <div className="glass rounded-xl p-6">
         <div className="flex items-center gap-3 mb-5">
           <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/15 flex items-center justify-center">
             <Shield size={14} className="text-blue-400" />
           </div>
           <div>
-            <h3 className="text-sm font-medium text-foreground">Daily Limits</h3>
-            <p className="text-xs text-muted-foreground">Stay within LinkedIn safety guidelines</p>
+            <h3 className="h-card">Daily Limits</h3>
+            <p className="t-caption">Stay within LinkedIn safety guidelines</p>
           </div>
         </div>
         <div>
@@ -412,16 +456,18 @@ export default function SettingsPage() {
           <p className="text-xs text-muted-foreground mt-1.5">Connection requests per day (messages are unlimited)</p>
         </div>
       </div>
+      )}
 
       {/* Timing */}
+      {activeSection === 'sending' && (
       <div className="glass rounded-xl p-6">
         <div className="flex items-center gap-3 mb-5">
           <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/15 flex items-center justify-center">
             <Clock size={14} className="text-emerald-400" />
           </div>
           <div>
-            <h3 className="text-sm font-medium text-foreground">Timing Controls</h3>
-            <p className="text-xs text-muted-foreground">Randomized delays between actions</p>
+            <h3 className="h-card">Timing Controls</h3>
+            <p className="t-caption">Randomized delays between actions</p>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-4 max-w-sm">
@@ -435,16 +481,18 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+      )}
 
       {/* Change Password */}
+      {activeSection === 'security' && (
       <div className="glass rounded-xl p-6">
         <div className="flex items-center gap-3 mb-5">
           <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/15 flex items-center justify-center">
             <Key size={14} className="text-amber-400" />
           </div>
           <div>
-            <h3 className="text-sm font-medium text-foreground">Change Password</h3>
-            <p className="text-xs text-muted-foreground">Update your login password</p>
+            <h3 className="h-card">Change Password</h3>
+            <p className="t-caption">Update your login password</p>
           </div>
         </div>
         <div className="space-y-3 max-w-sm">
@@ -497,15 +545,27 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+      )}
 
-      <button
-        onClick={saveConfig}
-        disabled={saving}
-        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 disabled:opacity-40 transition-all glow-sm"
-      >
-        <Save size={15} />
-        {saving ? 'Saving...' : 'Save Settings'}
-      </button>
+        </div> {/* /section content */}
+      </div> {/* /grid */}
+
+      {/* Sticky save bar — applies to every section except security (password has its own button) */}
+      {activeSection !== 'security' && (
+        <div className="fixed bottom-0 left-[250px] right-0 bg-background/80 backdrop-blur-md border-t border-border z-20">
+          <div className="max-w-6xl mx-auto px-8 py-4 flex items-center justify-end gap-3">
+            <span className="t-caption">Changes apply to your settings only.</span>
+            <button
+              onClick={saveConfig}
+              disabled={saving}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 disabled:opacity-40 transition-all glow-sm"
+            >
+              <Save size={15} />
+              {saving ? 'Saving…' : 'Save Settings'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

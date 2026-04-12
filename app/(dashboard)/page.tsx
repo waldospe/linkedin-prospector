@@ -71,14 +71,11 @@ export default function DashboardPage() {
   const totalContacts = funnel.reduce((sum, f) => sum + f.count, 0);
   const funnelMap = Object.fromEntries(funnel.map(f => [f.status, f.count]));
 
-  // Find max for funnel bar widths
-  const maxFunnelCount = Math.max(...POSITIVE_STAGES.map(s => funnelMap[s] || 0), 1);
-
   const statCards = [
-    { label: 'Connections', value: stats.today.connections_sent, icon: Send, color: 'blue', gradient: 'gradient-card-blue' },
-    { label: 'Messages', value: stats.today.messages_sent, icon: MessageCircle, color: 'indigo', gradient: 'gradient-card-indigo' },
-    { label: 'Replies', value: stats.today.replies_received, icon: Reply, color: 'emerald', gradient: 'gradient-card-emerald' },
-    { label: 'Total Contacts', value: totalContacts, icon: Users, color: 'violet', gradient: 'gradient-card-violet' },
+    { label: 'Connections', value: stats.today.connections_sent, icon: Send, color: 'blue' },
+    { label: 'Messages', value: stats.today.messages_sent, icon: MessageCircle, color: 'indigo' },
+    { label: 'Replies', value: stats.today.replies_received, icon: Reply, color: 'emerald' },
+    { label: 'Total Contacts', value: totalContacts, icon: Users, color: 'violet' },
   ];
 
   const iconColors: Record<string, string> = {
@@ -94,10 +91,10 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-[28px] font-bold text-foreground tracking-tight leading-tight">
+          <h1 className="h-page">
             {isViewingAll ? 'Team Overview' : `Welcome back${viewingUser ? `, ${viewingUser.name}` : ''}`}
           </h1>
-          <p className="text-[15px] text-muted-foreground mt-1.5 font-light">
+          <p className="t-meta mt-1">
             {isViewingAll ? 'Aggregated outreach activity across your team' : "Here's your outreach activity for today"}
           </p>
         </div>
@@ -124,15 +121,15 @@ export default function DashboardPage() {
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
-        {statCards.map(({ label, value, icon: Icon, color, gradient }, idx) => (
-          <div key={label} className={`glass ${gradient} rounded-2xl p-5 animate-slide-up`} style={{ animationDelay: `${idx * 60}ms` }}>
+        {statCards.map(({ label, value, icon: Icon, color }, idx) => (
+          <div key={label} className="glass rounded-2xl p-5 animate-slide-up" style={{ animationDelay: `${idx * 60}ms` }}>
             <div className="flex items-center justify-between mb-4">
-              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">{label}</span>
+              <span className="t-eyebrow">{label}</span>
               <div className={`w-9 h-9 rounded-xl flex items-center justify-center border ${iconColors[color]}`}>
                 <Icon size={16} />
               </div>
             </div>
-            <p className="text-[32px] font-bold text-foreground tabular-nums leading-none animate-count-up">{value}</p>
+            <p className="text-3xl font-semibold text-foreground tabular-nums leading-none animate-count-up">{value}</p>
           </div>
         ))}
       </div>
@@ -184,7 +181,7 @@ export default function DashboardPage() {
                 const stage = STAGE_MAP[stageKey];
                 const count = funnelMap[stageKey] || 0;
                 const pct = totalContacts > 0 ? (count / totalContacts) * 100 : 0;
-                const barWidth = maxFunnelCount > 0 ? (count / maxFunnelCount) * 100 : 0;
+                const barWidth = count > 0 ? Math.max(pct, 2) : 0;
                 const colors = stageColors[stageKey];
                 return (
                   <div key={stageKey}>

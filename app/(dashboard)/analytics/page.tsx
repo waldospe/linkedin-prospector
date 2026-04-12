@@ -54,7 +54,7 @@ export default function AnalyticsPage() {
 
   const funnelMap = Object.fromEntries(funnel.map(f => [f.status, f.count]));
   const totalContacts = funnel.reduce((sum, f) => sum + f.count, 0);
-  const maxPositive = Math.max(...POSITIVE_STAGES.map(s => funnelMap[s] || 0), 1);
+  // no longer need maxPositive — use percent-of-total with min-width
 
   const tooltipStyle = {
     contentStyle: { backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px', color: 'hsl(var(--foreground))' },
@@ -112,7 +112,7 @@ export default function AnalyticsPage() {
                   const stage = STAGE_MAP[stageKey];
                   const count = funnelMap[stageKey] || 0;
                   const pct = totalContacts > 0 ? (count / totalContacts) * 100 : 0;
-                  const barWidth = (count / maxPositive) * 100;
+                  const barWidth = count > 0 ? Math.max(pct, 2) : 0;
                   const colors = stageColors[stageKey];
                   return (
                     <div key={stageKey} className="animate-slide-up" style={{ animationDelay: `${i * 40}ms` }}>
@@ -185,15 +185,17 @@ export default function AnalyticsPage() {
         )}
       </div>
 
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Charts — stack vertically below xl */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <div className="glass rounded-xl p-5">
           <div className="flex items-center gap-2 mb-5">
             <BarChart3 size={16} className="text-muted-foreground" />
             <span className="text-sm font-medium text-foreground">Daily Activity</span>
           </div>
-          <div className="h-56">
-            {chartData.length > 0 ? (
+          <div className="h-72">
+            {loading ? (
+              <div className="h-full bg-secondary/40 rounded-xl animate-pulse" />
+            ) : chartData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData} barGap={2}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
@@ -216,8 +218,10 @@ export default function AnalyticsPage() {
             <TrendingUp size={16} className="text-muted-foreground" />
             <span className="text-sm font-medium text-foreground">Response Trend</span>
           </div>
-          <div className="h-56">
-            {chartData.length > 0 ? (
+          <div className="h-72">
+            {loading ? (
+              <div className="h-full bg-secondary/40 rounded-xl animate-pulse" />
+            ) : chartData.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
