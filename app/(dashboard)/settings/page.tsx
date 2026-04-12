@@ -154,13 +154,7 @@ export default function SettingsPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="space-y-4">
-        {[...Array(4)].map((_, i) => <div key={i} className="h-32 bg-secondary rounded-xl animate-pulse" />)}
-      </div>
-    );
-  }
+  const [activeSection, setActiveSection] = useState('account');
 
   const sections: Array<{ key: string; label: string; adminOnly?: boolean }> = [
     { key: 'account', label: 'Account' },
@@ -170,7 +164,14 @@ export default function SettingsPage() {
     { key: 'security', label: 'Security' },
     ...(isAdmin ? [{ key: 'admin', label: 'Admin', adminOnly: true }] : []),
   ];
-  const [activeSection, setActiveSection] = useState('account');
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        {[...Array(4)].map((_, i) => <div key={i} className="h-32 bg-secondary rounded-xl animate-pulse" />)}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 pb-24">
