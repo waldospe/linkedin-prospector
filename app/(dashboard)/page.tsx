@@ -71,11 +71,15 @@ export default function DashboardPage() {
   const totalContacts = funnel.reduce((sum, f) => sum + f.count, 0);
   const funnelMap = Object.fromEntries(funnel.map(f => [f.status, f.count]));
 
+  // Connections accepted = everyone who reached 'connected' or beyond
+  const connectedStatuses = ['connected', 'msg_sent', 'replied', 'engaged'];
+  const connectionsAccepted = connectedStatuses.reduce((sum, s) => sum + (funnelMap[s] || 0), 0);
+
   const statCards = [
-    { label: 'Connections', value: stats.today.connections_sent, icon: Send, color: 'blue' },
-    { label: 'Messages', value: stats.today.messages_sent, icon: MessageCircle, color: 'indigo' },
-    { label: 'Replies', value: stats.today.replies_received, icon: Reply, color: 'emerald' },
-    { label: 'Total Contacts', value: totalContacts, icon: Users, color: 'violet' },
+    { label: 'Connected', value: connectionsAccepted, icon: Users, color: 'blue' },
+    { label: 'Invites Sent', value: stats.today.connections_sent, icon: Send, color: 'indigo' },
+    { label: 'Messages', value: stats.today.messages_sent, icon: MessageCircle, color: 'emerald' },
+    { label: 'Replies', value: stats.today.replies_received, icon: Reply, color: 'violet' },
   ];
 
   const iconColors: Record<string, string> = {
