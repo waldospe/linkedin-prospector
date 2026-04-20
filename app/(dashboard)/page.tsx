@@ -36,9 +36,13 @@ export default function DashboardPage() {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [funnel, setFunnel] = useState<Array<{ status: string; count: number }>>([]);
   const [loading, setLoading] = useState(true);
+  const [health, setHealth] = useState<any>(null);
 
   useEffect(() => {
-    if (currentUser) fetchData();
+    if (currentUser) {
+      fetchData();
+      fetch(`/api/account-health${apiQuery}`).then(r => r.json()).then(setHealth).catch(() => {});
+    }
   }, [currentUser, viewAs]);
 
   const fetchData = async () => {
@@ -165,6 +169,54 @@ export default function DashboardPage() {
           {dailyProgress >= 100 ? '🎯 Connection limit reached — messages still sending' : `${Math.round(100 - dailyProgress)}% remaining`}
         </p>
       </div>
+
+      {/* Account Health */}
+      {health && (
+        <div className={`glass rounded-2xl p-6 border ${
+          health.level === 'excellent' ? 'border-emerald-500/20' :
+          health.level === 'good' ? 'border-blue-500/20' :
+          health.level === 'caution' ? 'border-amber-500/20' :
+          'border-red-500/20'
+        }`}>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2.5">
+              <span className="text-sm font-semibold text-foreground">Account Health</span>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className={`text-2xl font-bold tabular-nums ${
+                health.level === 'excellent' ? 'text-emerald-400' :
+                health.level === 'good' ? 'text-blue-400' :
+                health.level === 'caution' ? 'text-amber-400' :
+                'text-red-400'
+              }`}>{health.score}</span>
+              <span className="text-xs text-muted-foreground">/ 100</span>
+            </div>
+          </div>
+          <div className="h-2 bg-secondary rounded-full overflow-hidden mb-3">
+            <div className={`h-full rounded-full transition-all ${
+              health.level === 'excellent' ? 'bg-emerald-500' :
+              health.level === 'good' ? 'bg-blue-500' :
+              health.level === 'caution' ? 'bg-amber-500' :
+              'bg-red-500'
+            }`} style={{ width: `${health.score}%` }} />
+          </div>
+          <div className="grid grid-cols-4 gap-3 text-center">
+            <div><p className="text-lg font-semibold text-foreground tabular-nums">{health.acceptRate}%</p><p className="t-caption">Accept</p></div>
+            <div><p className="text-lg font-semibold text-foreground tabular-nums">{health.invitesSent}</p><p className="t-caption">Invites</p></div>
+            <div><p className="text-lg font-semibold text-foreground tabular-nums">{health.connected}</p><p className="t-caption">Connected</p></div>
+            <div><p className="text-lg font-semibold text-foreground tabular-nums">{health.messagesSent}</p><p className="t-caption">Messages</p></div>
+          </div>
+          {health.warnings.length > 0 && (
+            <div className="mt-4 space-y-1.5">
+              {health.warnings.map((w: string, i: number) => (
+                <p key={i} className="text-xs text-amber-400/80 flex items-start gap-1.5">
+                  <span className="shrink-0 mt-0.5">⚠</span> {w}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Funnel + Queue */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

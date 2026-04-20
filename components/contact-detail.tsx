@@ -22,13 +22,37 @@ export default function ContactDetail({ contactId, onClose }: ContactDetailProps
   const [contactLabels, setContactLabels] = useState<any[]>([]);
   const [allLabels, setAllLabels] = useState<any[]>([]);
   const [showLabelPicker, setShowLabelPicker] = useState(false);
+  const [sidebarTab, setSidebarTab] = useState<'profile' | 'timeline' | 'notes'>('profile');
+  const [timeline, setTimeline] = useState<any[]>([]);
+  const [notes, setNotes] = useState<any[]>([]);
+  const [newNote, setNewNote] = useState('');
   const { apiQuery } = useUser();
 
   useEffect(() => {
     fetchDetail();
     fetch(`/api/contacts/${contactId}/labels`).then(r => r.json()).then(d => { if (Array.isArray(d)) setContactLabels(d); });
     fetch('/api/labels').then(r => r.json()).then(d => { if (Array.isArray(d)) setAllLabels(d); });
+    fetch(`/api/contacts/${contactId}/events`).then(r => r.json()).then(d => { if (Array.isArray(d)) setTimeline(d); });
+    fetch(`/api/contacts/${contactId}/notes`).then(r => r.json()).then(d => { if (Array.isArray(d)) setNotes(d); });
   }, [contactId]);
+
+  const addNote = async () => {
+    if (!newNote.trim()) return;
+    await fetch(`/api/contacts/${contactId}/notes`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: newNote.trim() }),
+    });
+    setNewNote('');
+    fetch(`/api/contacts/${contactId}/notes`).then(r => r.json()).then(d => { if (Array.isArray(d)) setNotes(d); });
+  };
+
+  const deleteNote = async (noteId: number) => {
+    await fetch(`/api/contacts/${contactId}/notes`, {
+      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ noteId }),
+    });
+    setNotes(prev => prev.filter(n => n.id !== noteId));
+  };
 
   useEffect(() => {
     messageEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -245,12 +269,27 @@ export default function ContactDetail({ contactId, onClose }: ContactDetailProps
                 </div>
               )}
 
-              {/* Sequence history */}
-              {queueHistory.length > 0 && (
+              {/* Sidebar tabs */}
+              <div className="flex gap-1 border-t border-border pt-4">
+                {(['profile', 'timeline', 'notes'] as const).map(tab => (
+                  <button
+                    key={tab}
+                    onClick={() => setSidebarTab(tab)}
+                    className={`flex-1 text-[10px] font-semibold uppercase tracking-wider py-1.5 rounded-md transition-all ${
+                      sidebarTab === tab ? 'bg-blue-500/10 text-blue-400' : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {tab}
+                  </button>
+                ))}
+              </div>
+
+              {/* Profile tab: sequence history */}
+              {sidebarTab === 'profile' && queueHistory.length > 0 && (
                 <div>
                   <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-2">Sequence History</p>
                   <div className="space-y-1.5">
-                    {queueHistory.slice(-5).map((q: any) => (
+                    {queueHistory.slice(-8).map((q: any) => (
                       <div key={q.id} className="flex items-center gap-2 text-xs">
                         {q.status === 'completed' ? (
                           <CheckCircle2 size={11} className="text-emerald-400 shrink-0" />
@@ -266,6 +305,83 @@ export default function ContactDetail({ contactId, onClose }: ContactDetailProps
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* Timeline tab */}
+              {sidebarTab === 'timeline' && (
+                <div className="space-y-2">
+                  {timeline.length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-4">No events yet</p>
+                  ) : (
+                    timeline.map((e: any) => {
+                      const icons: Record<string, { icon: string; color: string }> = {
+                        invite_sent: { icon: '📤', color: 'text-blue-400' },
+                        connection_accepted: { icon: '🤝', color: 'text-emerald-400' },
+                        message_sent: { icon: '💬', color: 'text-indigo-400' },
+                        reply_received: { icon: '📩', color: 'text-emerald-400' },
+                        status_changed: { icon: '🔄', color: 'text-amber-400' },
+                      };
+                      const cfg = icons[e.event_type] || { icon: '●', color: 'text-muted-foreground' };
+                      return (
+                        <div key={e.id} className="flex gap-2 text-xs">
+                          <span className="shrink-0 mt-0.5">{cfg.icon}</span>
+                          <div className="flex-1 min-w-0">
+                            <p className={`font-medium ${cfg.color}`}>
+                              {e.event_type.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
+                            </p>
+                            {e.message_preview && (
+                              <p className="text-muted-foreground truncate mt-0.5">"{e.message_preview}"</p>
+                            )}
+                            {e.details && !e.message_preview && (
+                              <p className="text-muted-foreground truncate mt-0.5">{e.details}</p>
+                            )}
+                            {e.sequence_name && (
+                              <p className="text-violet-400/70 text-[10px] mt-0.5">{e.sequence_name}</p>
+                            )}
+                            <p className="text-muted-foreground/50 text-[10px] mt-0.5">
+                              {new Date(e.created_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+
+              {/* Notes tab */}
+              {sidebarTab === 'notes' && (
+                <div className="space-y-3">
+                  <div className="flex gap-2">
+                    <textarea
+                      value={newNote}
+                      onChange={e => setNewNote(e.target.value)}
+                      placeholder="Add a note..."
+                      rows={2}
+                      className="flex-1 input-field rounded-lg px-3 py-2 text-xs resize-none"
+                    />
+                    <button onClick={addNote} disabled={!newNote.trim()} className="px-3 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-500 disabled:opacity-40 transition-all shrink-0 self-end">
+                      Add
+                    </button>
+                  </div>
+                  {notes.length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-4">No notes yet</p>
+                  ) : (
+                    notes.map((n: any) => (
+                      <div key={n.id} className="p-2.5 rounded-lg bg-secondary/30 border border-border/50">
+                        <p className="text-xs text-foreground/90 whitespace-pre-wrap">{n.content}</p>
+                        <div className="flex items-center justify-between mt-2">
+                          <p className="text-[10px] text-muted-foreground">
+                            {n.user_name} · {new Date(n.created_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                          </p>
+                          <button onClick={() => deleteNote(n.id)} className="text-[10px] text-muted-foreground hover:text-red-400 transition-colors">
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               )}
             </div>

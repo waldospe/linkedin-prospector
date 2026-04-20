@@ -184,6 +184,74 @@ function initDb() {
     db.exec('UPDATE schema_version SET version = 13');
   }
 
+  if (currentVersion === 13) {
+    // === Feature 1: Contact timeline events ===
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS contact_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+        event_type TEXT NOT NULL,
+        details TEXT,
+        message_preview TEXT,
+        sequence_name TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_contact_events_contact ON contact_events(contact_id, created_at DESC)`);
+
+    // === Feature 2: Contact notes ===
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS contact_notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+        content TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // === Feature 3: Campaigns ===
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS campaigns (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        team_id INTEGER REFERENCES teams(id),
+        name TEXT NOT NULL,
+        description TEXT,
+        sequence_id INTEGER REFERENCES sequences(id),
+        status TEXT DEFAULT 'active',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS campaign_contacts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+        contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+        added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(campaign_id, contact_id)
+      )
+    `);
+
+    // === Feature 5: Warmup tracking ===
+    // Add warmup columns to users
+    const uCols = db.pragma('table_info(users)') as any[];
+    if (!uCols.find((c: any) => c.name === 'warmup_enabled')) {
+      db.exec(`ALTER TABLE users ADD COLUMN warmup_enabled INTEGER DEFAULT 0`);
+    }
+    if (!uCols.find((c: any) => c.name === 'warmup_start_date')) {
+      db.exec(`ALTER TABLE users ADD COLUMN warmup_start_date DATE`);
+    }
+    if (!uCols.find((c: any) => c.name === 'warmup_current_limit')) {
+      db.exec(`ALTER TABLE users ADD COLUMN warmup_current_limit INTEGER`);
+    }
+
+    db.exec('UPDATE schema_version SET version = 14');
+  }
+
   // Activity log
   db.exec(`
     CREATE TABLE IF NOT EXISTS activity_log (
@@ -1134,5 +1202,321 @@ export const contactLabels = {
     for (const contactId of contactIds) {
       insert.run(contactId, labelId);
     }
+  },
+};
+
+// ─── Contact Events (Timeline) ───────────────────────────────────
+
+export const contactEvents = {
+  log: (userId: number, contactId: number, eventType: string, details?: string, messagePreview?: string, sequenceName?: string) => {
+    return getDb().prepare(`
+      INSERT INTO contact_events (user_id, contact_id, event_type, details, message_preview, sequence_name)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(userId, contactId, eventType, details || null, messagePreview?.slice(0, 200) || null, sequenceName || null);
+  },
+  getForContact: (contactId: number, limit: number = 50) => {
+    return getDb().prepare(`
+      SELECT ce.*, u.name as user_name FROM contact_events ce
+      LEFT JOIN users u ON ce.user_id = u.id
+      WHERE ce.contact_id = ?
+      ORDER BY ce.created_at DESC LIMIT ?
+    `).all(contactId, limit);
+  },
+};
+
+// ─── Contact Notes ───────────────────────────────────────────────
+
+export const contactNotes = {
+  create: (userId: number, contactId: number, content: string) => {
+    return getDb().prepare(`
+      INSERT INTO contact_notes (user_id, contact_id, content)
+      VALUES (?, ?, ?)
+    `).run(userId, contactId, content);
+  },
+  getForContact: (contactId: number) => {
+    return getDb().prepare(`
+      SELECT cn.*, u.name as user_name FROM contact_notes cn
+      LEFT JOIN users u ON cn.user_id = u.id
+      WHERE cn.contact_id = ?
+      ORDER BY cn.created_at DESC
+    `).all(contactId);
+  },
+  update: (id: number, userId: number, content: string) => {
+    return getDb().prepare('UPDATE contact_notes SET content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ?').run(content, id, userId);
+  },
+  delete: (id: number, userId: number) => {
+    return getDb().prepare('DELETE FROM contact_notes WHERE id = ? AND user_id = ?').run(id, userId);
+  },
+};
+
+// ─── Campaigns ───────────────────────────────────────────────────
+
+export const campaigns = {
+  create: (userId: number, teamId: number, data: { name: string; description?: string; sequence_id?: number }) => {
+    return getDb().prepare(`
+      INSERT INTO campaigns (user_id, team_id, name, description, sequence_id)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(userId, teamId, data.name, data.description || null, data.sequence_id || null);
+  },
+  getAll: (userId: number) => {
+    return getDb().prepare(`
+      SELECT c.*, s.name as sequence_name,
+        (SELECT COUNT(*) FROM campaign_contacts cc WHERE cc.campaign_id = c.id) as contact_count
+      FROM campaigns c
+      LEFT JOIN sequences s ON c.sequence_id = s.id
+      WHERE c.user_id = ?
+      ORDER BY c.created_at DESC
+    `).all(userId);
+  },
+  getById: (id: number, userId: number) => {
+    return getDb().prepare(`
+      SELECT c.*, s.name as sequence_name FROM campaigns c
+      LEFT JOIN sequences s ON c.sequence_id = s.id
+      WHERE c.id = ? AND c.user_id = ?
+    `).get(id, userId);
+  },
+  update: (id: number, userId: number, data: { name?: string; description?: string; status?: string; sequence_id?: number }) => {
+    const fields: string[] = ['updated_at = CURRENT_TIMESTAMP'];
+    const params: any[] = [];
+    if (data.name !== undefined) { fields.push('name = ?'); params.push(data.name); }
+    if (data.description !== undefined) { fields.push('description = ?'); params.push(data.description); }
+    if (data.status !== undefined) { fields.push('status = ?'); params.push(data.status); }
+    if (data.sequence_id !== undefined) { fields.push('sequence_id = ?'); params.push(data.sequence_id); }
+    params.push(id, userId);
+    return getDb().prepare(`UPDATE campaigns SET ${fields.join(', ')} WHERE id = ? AND user_id = ?`).run(...params);
+  },
+  delete: (id: number, userId: number) => {
+    return getDb().prepare('DELETE FROM campaigns WHERE id = ? AND user_id = ?').run(id, userId);
+  },
+  addContacts: (campaignId: number, contactIds: number[]) => {
+    const insert = getDb().prepare('INSERT OR IGNORE INTO campaign_contacts (campaign_id, contact_id) VALUES (?, ?)');
+    for (const id of contactIds) insert.run(campaignId, id);
+  },
+  removeContact: (campaignId: number, contactId: number) => {
+    return getDb().prepare('DELETE FROM campaign_contacts WHERE campaign_id = ? AND contact_id = ?').run(campaignId, contactId);
+  },
+  getContacts: (campaignId: number) => {
+    return getDb().prepare(`
+      SELECT co.* FROM contacts co
+      JOIN campaign_contacts cc ON cc.contact_id = co.id
+      WHERE cc.campaign_id = ?
+      ORDER BY co.created_at DESC
+    `).all(campaignId);
+  },
+  getStats: (campaignId: number, userId: number) => {
+    const db = getDb();
+    const total = (db.prepare('SELECT COUNT(*) as cnt FROM campaign_contacts WHERE campaign_id = ?').get(campaignId) as any)?.cnt || 0;
+    const byStatus = db.prepare(`
+      SELECT co.status, COUNT(*) as cnt FROM contacts co
+      JOIN campaign_contacts cc ON cc.contact_id = co.id
+      WHERE cc.campaign_id = ?
+      GROUP BY co.status
+    `).all(campaignId) as Array<{ status: string; cnt: number }>;
+    const connectedStatuses = ['connected', 'msg_sent', 'replied', 'engaged'];
+    const connected = byStatus.filter(r => connectedStatuses.includes(r.status)).reduce((s, r) => s + r.cnt, 0);
+    const replied = byStatus.filter(r => ['replied', 'engaged'].includes(r.status)).reduce((s, r) => s + r.cnt, 0);
+    const queueStats = db.prepare(`
+      SELECT
+        SUM(CASE WHEN q.status = 'completed' THEN 1 ELSE 0 END) as completed,
+        COUNT(*) as total
+      FROM queue q
+      JOIN campaign_contacts cc ON q.contact_id = cc.contact_id
+      WHERE cc.campaign_id = ? AND q.user_id = ?
+    `).get(campaignId, userId) as any;
+    return {
+      total,
+      byStatus: Object.fromEntries(byStatus.map(r => [r.status, r.cnt])),
+      connected,
+      replied,
+      replyRate: connected > 0 ? Math.round((replied / connected) * 100) : 0,
+      connectRate: total > 0 ? Math.round((connected / total) * 100) : 0,
+      queueCompleted: queueStats?.completed || 0,
+      queueTotal: queueStats?.total || 0,
+      completionPct: queueStats?.total > 0 ? Math.round((queueStats.completed / queueStats.total) * 100) : 0,
+    };
+  },
+};
+
+// ─── Sequence Performance Analytics ──────────────────────────────
+
+export const sequenceAnalytics = {
+  getStepPerformance: (sequenceId: number, userId: number) => {
+    return getDb().prepare(`
+      SELECT
+        q.step_number,
+        q.action_type,
+        q.template_variant,
+        COUNT(*) as total,
+        SUM(CASE WHEN q.status = 'completed' THEN 1 ELSE 0 END) as completed,
+        SUM(CASE WHEN q.status = 'failed' THEN 1 ELSE 0 END) as failed,
+        SUM(CASE WHEN q.status = 'pending' THEN 1 ELSE 0 END) as pending
+      FROM queue q
+      WHERE q.sequence_id = ? AND q.user_id = ?
+      GROUP BY q.step_number, q.action_type, q.template_variant
+      ORDER BY q.step_number, q.template_variant
+    `).all(sequenceId, userId);
+  },
+  getConversionFunnel: (sequenceId: number, userId: number) => {
+    // How many contacts made it to each step
+    return getDb().prepare(`
+      SELECT
+        q.step_number,
+        q.action_type,
+        COUNT(DISTINCT q.contact_id) as contacts,
+        SUM(CASE WHEN q.status = 'completed' THEN 1 ELSE 0 END) as completed
+      FROM queue q
+      WHERE q.sequence_id = ? AND q.user_id = ?
+      GROUP BY q.step_number, q.action_type
+      ORDER BY q.step_number
+    `).all(sequenceId, userId);
+  },
+  getVariantPerformance: (sequenceId: number, userId: number) => {
+    // For A/B testing: how does each variant perform
+    const db = getDb();
+    return db.prepare(`
+      SELECT
+        q.step_number,
+        q.template_variant as variant,
+        COUNT(DISTINCT q.contact_id) as sent,
+        (SELECT COUNT(DISTINCT q2.contact_id) FROM queue q2
+         WHERE q2.sequence_id = q.sequence_id AND q2.user_id = q.user_id
+         AND q2.template_variant = q.template_variant
+         AND q2.step_number = q.step_number
+         AND q2.contact_id IN (
+           SELECT co.id FROM contacts co WHERE co.status IN ('replied','engaged') AND co.user_id = q.user_id
+         )) as replies
+      FROM queue q
+      WHERE q.sequence_id = ? AND q.user_id = ? AND q.template_variant IS NOT NULL
+      GROUP BY q.step_number, q.template_variant
+      ORDER BY q.step_number, q.template_variant
+    `).all(sequenceId, userId);
+  },
+  getOverview: (userId: number) => {
+    // Per-sequence summary for the analytics page
+    return getDb().prepare(`
+      SELECT
+        s.id, s.name,
+        COUNT(DISTINCT q.contact_id) as total_contacts,
+        SUM(CASE WHEN q.status = 'completed' AND q.action_type = 'connection' THEN 1 ELSE 0 END) as invites_sent,
+        SUM(CASE WHEN q.status = 'completed' AND q.action_type = 'message' THEN 1 ELSE 0 END) as messages_sent,
+        (SELECT COUNT(*) FROM contacts co
+         JOIN queue q2 ON co.id = q2.contact_id
+         WHERE q2.sequence_id = s.id AND q2.user_id = ?
+         AND co.status IN ('connected','msg_sent','replied','engaged')
+         AND co.user_id = ?) as connected,
+        (SELECT COUNT(*) FROM contacts co
+         JOIN queue q2 ON co.id = q2.contact_id
+         WHERE q2.sequence_id = s.id AND q2.user_id = ?
+         AND co.status IN ('replied','engaged')
+         AND co.user_id = ?) as replied
+      FROM sequences s
+      JOIN queue q ON q.sequence_id = s.id AND q.user_id = ?
+      WHERE s.active = 1
+      GROUP BY s.id
+      ORDER BY total_contacts DESC
+    `).all(userId, userId, userId, userId, userId);
+  },
+};
+
+// ─── Warmup & Account Health ─────────────────────────────────────
+
+export const warmup = {
+  getStatus: (userId: number) => {
+    const user = getDb().prepare('SELECT warmup_enabled, warmup_start_date, warmup_current_limit, daily_limit FROM users WHERE id = ?').get(userId) as any;
+    if (!user || !user.warmup_enabled) return null;
+
+    const startDate = new Date(user.warmup_start_date);
+    const daysSinceStart = Math.floor((Date.now() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+    // Ramp: start at 5, increase by 3 per day, cap at daily_limit
+    const targetLimit = Math.min(5 + daysSinceStart * 3, user.daily_limit);
+    // Update current limit
+    if (targetLimit !== user.warmup_current_limit) {
+      getDb().prepare('UPDATE users SET warmup_current_limit = ? WHERE id = ?').run(targetLimit, userId);
+    }
+    return {
+      enabled: true,
+      startDate: user.warmup_start_date,
+      daysSinceStart,
+      currentLimit: targetLimit,
+      maxLimit: user.daily_limit,
+      complete: targetLimit >= user.daily_limit,
+    };
+  },
+  enable: (userId: number) => {
+    getDb().prepare('UPDATE users SET warmup_enabled = 1, warmup_start_date = date(\'now\'), warmup_current_limit = 5 WHERE id = ?').run(userId);
+  },
+  disable: (userId: number) => {
+    getDb().prepare('UPDATE users SET warmup_enabled = 0, warmup_current_limit = NULL WHERE id = ?').run(userId);
+  },
+  getEffectiveLimit: (userId: number): number => {
+    const user = getDb().prepare('SELECT warmup_enabled, warmup_current_limit, daily_limit FROM users WHERE id = ?').get(userId) as any;
+    if (!user) return 20;
+    if (user.warmup_enabled && user.warmup_current_limit) return user.warmup_current_limit;
+    return user.daily_limit || 20;
+  },
+};
+
+export const accountHealth = {
+  getScore: (userId: number) => {
+    const db = getDb();
+    // Last 30 days stats
+    const recentQueue = db.prepare(`
+      SELECT
+        SUM(CASE WHEN action_type = 'connection' AND status = 'completed' THEN 1 ELSE 0 END) as invites_sent,
+        SUM(CASE WHEN action_type = 'connection' AND status = 'failed' THEN 1 ELSE 0 END) as invites_failed,
+        SUM(CASE WHEN action_type = 'message' AND status = 'completed' THEN 1 ELSE 0 END) as messages_sent,
+        SUM(CASE WHEN action_type = 'message' AND status = 'failed' THEN 1 ELSE 0 END) as messages_failed
+      FROM queue WHERE user_id = ? AND executed_at >= datetime('now', '-30 days')
+    `).get(userId) as any;
+
+    const contactStats = db.prepare(`
+      SELECT status, COUNT(*) as cnt FROM contacts
+      WHERE user_id = ? AND created_at >= datetime('now', '-30 days')
+      GROUP BY status
+    `).all(userId) as Array<{ status: string; cnt: number }>;
+
+    const statusMap = Object.fromEntries(contactStats.map(r => [r.status, r.cnt]));
+    const invitesSent = recentQueue?.invites_sent || 0;
+    const invitesFailed = recentQueue?.invites_failed || 0;
+    const messagesSent = recentQueue?.messages_sent || 0;
+    const messagesFailed = recentQueue?.messages_failed || 0;
+    const connected = (statusMap.connected || 0) + (statusMap.msg_sent || 0) + (statusMap.replied || 0) + (statusMap.engaged || 0);
+    const declined = statusMap.invite_declined || 0;
+    const optedOut = statusMap.opted_out || 0;
+
+    // Acceptance rate
+    const acceptRate = invitesSent > 0 ? Math.round((connected / invitesSent) * 100) : 0;
+    // Error rate
+    const totalActions = invitesSent + invitesFailed + messagesSent + messagesFailed;
+    const errorRate = totalActions > 0 ? Math.round(((invitesFailed + messagesFailed) / totalActions) * 100) : 0;
+    // Negative signal rate
+    const negativeRate = invitesSent > 0 ? Math.round(((declined + optedOut) / invitesSent) * 100) : 0;
+
+    // Score: 100 - penalties
+    let score = 100;
+    if (acceptRate < 20 && invitesSent > 10) score -= 25;
+    else if (acceptRate < 40 && invitesSent > 10) score -= 10;
+    if (errorRate > 20) score -= 20;
+    else if (errorRate > 10) score -= 10;
+    if (negativeRate > 10) score -= 20;
+    else if (negativeRate > 5) score -= 10;
+    score = Math.max(0, Math.min(100, score));
+
+    let level: 'excellent' | 'good' | 'caution' | 'danger' = 'excellent';
+    if (score < 50) level = 'danger';
+    else if (score < 70) level = 'caution';
+    else if (score < 90) level = 'good';
+
+    const warnings: string[] = [];
+    if (acceptRate < 20 && invitesSent > 10) warnings.push('Very low connection acceptance rate — review your targeting or message.');
+    if (errorRate > 20) warnings.push('High error rate — some messages are failing to send.');
+    if (negativeRate > 10) warnings.push('High opt-out/decline rate — reduce volume or improve personalization.');
+    if (invitesFailed > 5) warnings.push(`${invitesFailed} connection requests failed in the last 30 days.`);
+
+    return {
+      score, level, acceptRate, errorRate, negativeRate, warnings,
+      invitesSent, connected, messagesSent, declined, optedOut,
+      invitesFailed, messagesFailed,
+    };
   },
 };

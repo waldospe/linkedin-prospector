@@ -19,6 +19,9 @@ import {
   ScrollText,
   Sun,
   Moon,
+  Inbox,
+  Megaphone,
+  Shield,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/components/user-context';
@@ -27,8 +30,10 @@ import { OnboardingSidebar } from '@/components/onboarding-tracker';
 
 const navItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/inbox', label: 'Inbox', icon: Inbox },
   { href: '/search', label: 'Search', icon: Search },
   { href: '/contacts', label: 'Contacts', icon: Users },
+  { href: '/campaigns', label: 'Campaigns', icon: Megaphone },
   { href: '/sequences', label: 'Sequences', icon: GitBranch },
   { href: '/queue', label: 'Queue', icon: ListTodo },
   { href: '/templates', label: 'Templates', icon: FileText },

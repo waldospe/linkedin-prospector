@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { queue, contacts, stats, users, globalConfig, templates, messages, sequences, getDb } from '@/lib/db';
+import { queue, contacts, stats, users, globalConfig, templates, messages, sequences, getDb, contactEvents, warmup } from '@/lib/db';
 import { substituteVariables } from '@/lib/constants';
 import { sendAlertEmail, sendReplyAlertEmail } from '@/lib/email';
 
@@ -62,9 +62,10 @@ export async function POST(req: NextRequest) {
       const readyMessages = ready.filter(item => item.action_type === 'message');
       const readyConnections = ready.filter(item => item.action_type === 'connection');
 
-      // Daily limit only applies to connections
+      // Daily limit — use warmup limit if enabled, otherwise user's configured limit
+      const effectiveLimit = warmup.getEffectiveLimit(user.id);
       const today = stats.getToday(user.id, user.timezone);
-      const connectionsRemaining = user.daily_limit - today.connections_sent;
+      const connectionsRemaining = effectiveLimit - today.connections_sent;
 
       // Connection spacing: spread evenly across the send window
       const db = getDb();
@@ -232,6 +233,7 @@ export async function POST(req: NextRequest) {
             queue.updateStatus(item.id, 'completed', user.id);
             contacts.updateStatus(item.contact_id, 'invite_sent', user.id);
             stats.increment('connections_sent', user.id, user.timezone);
+            contactEvents.log(user.id, item.contact_id, 'invite_sent', undefined, messageText?.slice(0, 200) || undefined, item.sequence_name);
             connectionsSentThisCycle++;
 
           } else if (item.action_type === 'message') {
@@ -261,6 +263,7 @@ export async function POST(req: NextRequest) {
             queue.updateStatus(item.id, 'completed', user.id);
             contacts.updateStatus(item.contact_id, 'msg_sent', user.id);
             stats.increment('messages_sent', user.id, user.timezone);
+            contactEvents.log(user.id, item.contact_id, 'message_sent', undefined, messageText?.slice(0, 200) || undefined, item.sequence_name);
 
             if (messageText) {
               messages.create(user.id, { contact_id: item.contact_id, content: messageText });
@@ -353,6 +356,7 @@ async function monitorContacts(user: any, cfg: any, baseUrl: string): Promise<nu
       if (profile.is_relationship === true || profile.network_distance === 'FIRST_DEGREE') {
         // They accepted! Update status and queue next sequence step
         contacts.updateStatus(contact.id, 'connected', user.id);
+        contactEvents.log(user.id, contact.id, 'connection_accepted');
         updated++;
 
         // Find the last completed queue item for this contact to advance the sequence
@@ -435,6 +439,7 @@ async function monitorContacts(user: any, cfg: any, baseUrl: string): Promise<nu
           contacts.updateStatus(contact.id, 'replied', user.id);
           stats.increment('replies_received', user.id, user.timezone);
           messages.markReplied(contact.id, user.id);
+          contactEvents.log(user.id, contact.id, 'reply_received', chat.last_message?.text?.slice(0, 200) || null);
           updated++;
 
           // Fire instant reply alert email (if user opted in)
