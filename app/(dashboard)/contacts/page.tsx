@@ -10,7 +10,7 @@ import {
   DialogTrigger
 } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Trash2, Upload, ExternalLink, Search, Users, FileSpreadsheet, Link2, CheckCircle2, AlertCircle, ArrowRight, Filter, GitBranch, AlertTriangle, Edit2, Save, Pause, Play, Ban, Tag, MoreHorizontal } from 'lucide-react';
+import { Plus, Trash2, Upload, ExternalLink, Search, Users, FileSpreadsheet, Link2, CheckCircle2, AlertCircle, ArrowRight, Filter, GitBranch, AlertTriangle, Edit2, Save, Pause, Play, Ban, Tag, MoreHorizontal, Megaphone } from 'lucide-react';
 import { FUNNEL_STAGES, stageColors, STAGE_MAP } from '@/lib/constants';
 import { useUser } from '@/components/user-context';
 import ContactDetail from '@/components/contact-detail';
@@ -87,6 +87,7 @@ export default function ContactsPage() {
   const [labelPickerContact, setLabelPickerContact] = useState<number | null>(null);
   const [importLabelIds, setImportLabelIds] = useState<Array<number | { name: string; color: string }>>([]);
   const [showImportLabelPicker, setShowImportLabelPicker] = useState(false);
+  const [campaignsList, setCampaignsList] = useState<Array<{ id: number; name: string }>>([]);
   const { apiQuery, viewAs, isViewingAll } = useUser();
 
   // Debounce search
@@ -102,6 +103,9 @@ export default function ContactsPage() {
     });
     fetch('/api/labels').then(r => r.json()).then(data => {
       if (Array.isArray(data)) setAllLabels(data);
+    });
+    fetch(`/api/campaigns${apiQuery}`).then(r => r.json()).then(data => {
+      if (Array.isArray(data)) setCampaignsList(data);
     });
   }, [apiQuery, page, filterStatus, search, filterLabelIds]);
 
@@ -618,6 +622,29 @@ export default function ContactsPage() {
               </select>
             </div>
           )}
+          {campaignsList.length > 0 && (<>
+            <div className="h-4 w-px bg-border" />
+            <div className="flex items-center gap-2">
+              <Megaphone size={14} className="text-muted-foreground" />
+              <select
+                defaultValue=""
+                onChange={async (e) => {
+                  if (!e.target.value) return;
+                  const campaignId = parseInt(e.target.value);
+                  await fetch(`/api/campaigns/${campaignId}/contacts`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contact_ids: Array.from(selectedIds) }),
+                  });
+                  e.target.value = '';
+                  setSelectedIds(new Set());
+                }}
+                className="h-8 bg-background/50 text-foreground text-xs rounded-lg px-2 border border-border focus:outline-none focus:border-blue-500/50"
+              >
+                <option value="">+ Campaign</option>
+                {campaignsList.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+          </>)}
           <div className="h-4 w-px bg-border" />
           <button onClick={() => setShowDeleteConfirm(true)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-500/20 text-red-400 text-xs font-medium hover:bg-red-500/10 transition-all">
             <Trash2 size={12} />

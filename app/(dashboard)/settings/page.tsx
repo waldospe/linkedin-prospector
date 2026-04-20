@@ -4,7 +4,75 @@ import { useEffect, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { useUser } from '@/components/user-context';
 import { useOnboarding } from '@/components/onboarding-tracker';
-import { Save, Key, Clock, Shield, Lock, CheckCircle2, Globe, Calendar, Linkedin, Eye, EyeOff, Mail } from 'lucide-react';
+import { Save, Key, Clock, Shield, Lock, CheckCircle2, Globe, Calendar, Linkedin, Eye, EyeOff, Mail, Flame } from 'lucide-react';
+
+function WarmupCard() {
+  const [warmupStatus, setWarmupStatus] = useState<any>(null);
+  const [toggling, setToggling] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/warmup').then(r => r.json()).then(setWarmupStatus).catch(() => {});
+  }, []);
+
+  const toggle = async (enabled: boolean) => {
+    setToggling(true);
+    await fetch('/api/warmup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled }) });
+    const res = await fetch('/api/warmup');
+    setWarmupStatus(await res.json());
+    setToggling(false);
+  };
+
+  return (
+    <div className="glass rounded-xl p-6">
+      <div className="flex items-center gap-3 mb-5">
+        <div className="w-8 h-8 rounded-lg bg-orange-500/10 border border-orange-500/15 flex items-center justify-center">
+          <Flame size={14} className="text-orange-400" />
+        </div>
+        <div className="flex-1">
+          <h3 className="h-card">Account Warmup</h3>
+          <p className="t-caption">Gradually ramp connection requests to protect your LinkedIn account</p>
+        </div>
+        <button
+          onClick={() => toggle(!warmupStatus?.enabled)}
+          disabled={toggling}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+            warmupStatus?.enabled
+              ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20 hover:bg-orange-500/20'
+              : 'bg-secondary text-muted-foreground border border-border hover:text-foreground'
+          }`}
+        >
+          {toggling ? 'Saving...' : warmupStatus?.enabled ? 'Enabled' : 'Enable'}
+        </button>
+      </div>
+      {warmupStatus?.enabled && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="t-caption">Day {warmupStatus.daysSinceStart} of warmup</span>
+            <span className="text-sm font-medium text-foreground">
+              {warmupStatus.currentLimit} / {warmupStatus.maxLimit} per day
+            </span>
+          </div>
+          <div className="h-2 bg-secondary rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all ${warmupStatus.complete ? 'bg-emerald-500' : 'bg-orange-500'}`}
+              style={{ width: `${Math.round((warmupStatus.currentLimit / warmupStatus.maxLimit) * 100)}%` }}
+            />
+          </div>
+          <p className="t-caption">
+            {warmupStatus.complete
+              ? 'Warmup complete — sending at full daily limit.'
+              : `Ramping by 3/day. Full limit in ~${Math.ceil((warmupStatus.maxLimit - warmupStatus.currentLimit) / 3)} days.`}
+          </p>
+        </div>
+      )}
+      {!warmupStatus?.enabled && (
+        <p className="t-caption">
+          Recommended for new LinkedIn accounts or after a period of inactivity. Starts at 5 connections/day and increases by 3 each day until reaching your daily limit.
+        </p>
+      )}
+    </div>
+  );
+}
 
 const TIMEZONES = [
   'America/New_York',
@@ -457,6 +525,11 @@ export default function SettingsPage() {
           <p className="text-xs text-muted-foreground mt-1.5">Connection requests per day (messages are unlimited)</p>
         </div>
       </div>
+      )}
+
+      {/* Warmup */}
+      {activeSection === 'sending' && (
+      <WarmupCard />
       )}
 
       {/* Timing */}

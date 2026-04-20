@@ -14,6 +14,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import SinceYouWereGone from '@/components/since-you-were-gone';
+import { QuickStart } from '@/components/quick-start';
 
 interface Stats {
   today: {
@@ -96,6 +97,7 @@ export default function DashboardPage() {
   return (
     <div className="space-y-8">
       <SinceYouWereGone />
+      <QuickStart />
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

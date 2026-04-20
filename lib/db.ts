@@ -252,6 +252,44 @@ function initDb() {
     db.exec('UPDATE schema_version SET version = 14');
   }
 
+  if (currentVersion === 14) {
+    // Inbox handled state
+    const cCols = db.pragma('table_info(contacts)') as any[];
+    if (!cCols.find((c: any) => c.name === 'inbox_status')) {
+      db.exec(`ALTER TABLE contacts ADD COLUMN inbox_status TEXT DEFAULT 'unread'`);
+    }
+    db.exec('UPDATE schema_version SET version = 15');
+  }
+
+  if (currentVersion === 15) {
+    // Billing / subscriptions
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS subscriptions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        team_id INTEGER NOT NULL REFERENCES teams(id),
+        stripe_customer_id TEXT,
+        stripe_subscription_id TEXT,
+        plan TEXT DEFAULT 'free',
+        status TEXT DEFAULT 'active',
+        current_period_start TEXT,
+        current_period_end TEXT,
+        cancel_at_period_end INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_subs_team ON subscriptions(team_id)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_subs_stripe ON subscriptions(stripe_subscription_id)`);
+
+    // Add stripe_customer_id to teams
+    const tCols = db.pragma('table_info(teams)') as any[];
+    if (!tCols.find((c: any) => c.name === 'stripe_customer_id')) {
+      db.exec(`ALTER TABLE teams ADD COLUMN stripe_customer_id TEXT`);
+    }
+
+    db.exec('UPDATE schema_version SET version = 16');
+  }
+
   // Activity log
   db.exec(`
     CREATE TABLE IF NOT EXISTS activity_log (
@@ -1453,6 +1491,41 @@ export const warmup = {
     if (!user) return 20;
     if (user.warmup_enabled && user.warmup_current_limit) return user.warmup_current_limit;
     return user.daily_limit || 20;
+  },
+};
+
+// ─── Subscriptions / Billing ─────────────────────────────────────
+
+export const subscriptions = {
+  getByTeam: (teamId: number) => {
+    return getDb().prepare('SELECT * FROM subscriptions WHERE team_id = ? ORDER BY created_at DESC LIMIT 1').get(teamId) as any;
+  },
+  getByStripeSubscriptionId: (stripeSubId: string) => {
+    return getDb().prepare('SELECT * FROM subscriptions WHERE stripe_subscription_id = ?').get(stripeSubId) as any;
+  },
+  create: (data: { team_id: number; stripe_customer_id: string; stripe_subscription_id: string; plan: string; status: string; current_period_start?: string; current_period_end?: string }) => {
+    return getDb().prepare(`
+      INSERT INTO subscriptions (team_id, stripe_customer_id, stripe_subscription_id, plan, status, current_period_start, current_period_end)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(data.team_id, data.stripe_customer_id, data.stripe_subscription_id, data.plan, data.status, data.current_period_start || null, data.current_period_end || null);
+  },
+  update: (stripeSubId: string, data: { status?: string; plan?: string; current_period_start?: string; current_period_end?: string; cancel_at_period_end?: boolean }) => {
+    const fields: string[] = ['updated_at = CURRENT_TIMESTAMP'];
+    const params: any[] = [];
+    if (data.status !== undefined) { fields.push('status = ?'); params.push(data.status); }
+    if (data.plan !== undefined) { fields.push('plan = ?'); params.push(data.plan); }
+    if (data.current_period_start) { fields.push('current_period_start = ?'); params.push(data.current_period_start); }
+    if (data.current_period_end) { fields.push('current_period_end = ?'); params.push(data.current_period_end); }
+    if (data.cancel_at_period_end !== undefined) { fields.push('cancel_at_period_end = ?'); params.push(data.cancel_at_period_end ? 1 : 0); }
+    params.push(stripeSubId);
+    return getDb().prepare(`UPDATE subscriptions SET ${fields.join(', ')} WHERE stripe_subscription_id = ?`).run(...params);
+  },
+  getPlanForUser: (userId: number): { plan: string; status: string; periodEnd: string | null } => {
+    const user = getDb().prepare('SELECT team_id FROM users WHERE id = ?').get(userId) as any;
+    if (!user?.team_id) return { plan: 'free', status: 'active', periodEnd: null };
+    const sub = getDb().prepare('SELECT * FROM subscriptions WHERE team_id = ? AND status IN (\'active\',\'trialing\') ORDER BY created_at DESC LIMIT 1').get(user.team_id) as any;
+    if (!sub) return { plan: 'free', status: 'active', periodEnd: null };
+    return { plan: sub.plan, status: sub.status, periodEnd: sub.current_period_end };
   },
 };
 
