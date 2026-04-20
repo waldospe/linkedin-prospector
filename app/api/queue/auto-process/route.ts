@@ -1,16 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { queue, contacts, stats, users, globalConfig, templates, messages, sequences, getDb, contactEvents, warmup } from '@/lib/db';
+import { queue, contacts, stats, users, globalConfig, messages, getDb, contactEvents, warmup } from '@/lib/db';
 import { substituteVariables } from '@/lib/constants';
 import { sendAlertEmail, sendReplyAlertEmail } from '@/lib/email';
+import { getProfile, sendInvite, sendMessage, getChats, isConnected, extractLinkedInSlug } from '@/lib/unipile';
+import { QUEUE_CONSTANTS } from '@/lib/types';
 
-// Fetch wrapper with timeout to prevent hanging on Unipile outages
-const FETCH_TIMEOUT_MS = 15000;
+// Timeout wrapper for raw fetch calls not yet migrated to unipile client
 function fetchWithTimeout(url: string, options?: RequestInit): Promise<Response> {
-  return fetch(url, { ...options, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+  return fetch(url, { ...options, signal: AbortSignal.timeout(QUEUE_CONSTANTS.FETCH_TIMEOUT_MS) });
 }
 
+const {
+  MAX_CONNECTIONS_PER_CYCLE, MAX_MESSAGES_PER_CYCLE, CONNECTION_BUFFER_SIZE,
+  MONITOR_INVITE_BATCH, MONITOR_REPLY_BATCH, INVITE_TIMEOUT_DAYS,
+  MIN_GAP_FRACTION, MIN_GAP_MINUTES, INTER_ACTION_DELAY, MONITOR_API_DELAY,
+  ERROR_ALERT_THRESHOLD, ALERT_COOLDOWN_MS,
+} = QUEUE_CONSTANTS;
+
 // Track error rate for alerting
-let consecutiveEmptyCycles = 0;
 let lastAlertSent = 0;
 
 // Auto-process queue for ALL users who are within their send window and under daily limits.
@@ -86,7 +93,7 @@ export async function POST(req: NextRequest) {
         const [eH, eM] = (daySchedule.end || '17:00').split(':').map(Number);
         const windowMinutes = (eH * 60 + eM) - (sH * 60 + sM);
         const baseGapMinutes = connectionsRemaining > 0 ? Math.floor(windowMinutes / connectionsRemaining) : 30;
-        const minGapMinutes = Math.max(5, Math.floor(baseGapMinutes * 0.7));
+        const minGapMinutes = Math.max(MIN_GAP_MINUTES, Math.floor(baseGapMinutes * MIN_GAP_FRACTION));
 
         const lastConnection = db.prepare(
           "SELECT executed_at FROM queue WHERE user_id = ? AND action_type = 'connection' AND status = 'completed' AND executed_at IS NOT NULL ORDER BY executed_at DESC LIMIT 1"
@@ -101,11 +108,9 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Build batch: up to 2 messages per cycle (every 2 min = plenty of throughput)
-      // + at most 1 connection (if allowed)
       const batch = [
-        ...readyMessages.slice(0, 2),
-        ...(connectionAllowed ? readyConnections.slice(0, 6) : []), // buffer for skips
+        ...readyMessages.slice(0, MAX_MESSAGES_PER_CYCLE),
+        ...(connectionAllowed ? readyConnections.slice(0, CONNECTION_BUFFER_SIZE) : []),
       ];
 
       if (batch.length === 0) {
@@ -121,7 +126,7 @@ export async function POST(req: NextRequest) {
       for (const item of batch) {
         // Connections: max 1 per cycle, respect daily limit
         if (item.action_type === 'connection') {
-          if (connectionsSentThisCycle >= 1 || (today.connections_sent + connectionsSentThisCycle) >= user.daily_limit) continue;
+          if (connectionsSentThisCycle >= MAX_CONNECTIONS_PER_CYCLE || (today.connections_sent + connectionsSentThisCycle) >= effectiveLimit) continue;
         }
 
         try {
@@ -197,7 +202,12 @@ export async function POST(req: NextRequest) {
 
           if (!profileRes.ok) {
             const errText = await profileRes.text();
-            queue.updateStatus(item.id, 'failed', user.id, `Profile lookup failed: ${errText.slice(0, 150)}`);
+            const isRetryable = profileRes.status >= 429 || profileRes.status >= 500;
+            if (isRetryable) {
+              queue.markRetryable(item.id, user.id, `Profile lookup ${profileRes.status}: ${errText.slice(0, 150)}`);
+            } else {
+              queue.updateStatus(item.id, 'failed', user.id, `Profile lookup failed: ${errText.slice(0, 150)}`);
+            }
             errors.push(`${item.contact_name}: profile lookup failed`);
             continue;
           }
@@ -307,14 +317,18 @@ export async function POST(req: NextRequest) {
             }
           }
 
-          // Random delay between actions (2-5 seconds during processing)
           if (batch.indexOf(item) < batch.length - 1) {
-            const delay = 2000 + Math.floor(Math.random() * 3000);
+            const delay = INTER_ACTION_DELAY[0] + Math.floor(Math.random() * (INTER_ACTION_DELAY[1] - INTER_ACTION_DELAY[0]));
             await new Promise(resolve => setTimeout(resolve, delay));
           }
 
         } catch (err: any) {
-          queue.updateStatus(item.id, 'failed', user.id, err.message?.slice(0, 200));
+          const isTimeout = err.name === 'TimeoutError' || err.message?.includes('timeout');
+          if (isTimeout) {
+            queue.markRetryable(item.id, user.id, `Timeout: ${err.message?.slice(0, 150)}`);
+          } else {
+            queue.updateStatus(item.id, 'failed', user.id, err.message?.slice(0, 200));
+          }
           errors.push(`${item.contact_name}: ${err.message?.slice(0, 100)}`);
         }
       }
@@ -326,7 +340,7 @@ export async function POST(req: NextRequest) {
 
     // Alert on high error rates (more than 5 errors in one cycle, max 1 alert per hour)
     const totalErrors = results.reduce((s, r) => s + r.errors.length, 0);
-    if (totalErrors > 5 && Date.now() - lastAlertSent > 3600000) {
+    if (totalErrors > ERROR_ALERT_THRESHOLD && Date.now() - lastAlertSent > ALERT_COOLDOWN_MS) {
       lastAlertSent = Date.now();
       const errorSummary = results.flatMap(r => r.errors.map(e => `${r.user}: ${e}`)).join('\n');
       sendAlertEmail({ subject: `${totalErrors} queue errors this cycle`, body: errorSummary }).catch((e) => console.error('[auto-process] Alert email failed:', e.message));
@@ -346,7 +360,7 @@ async function monitorContacts(user: any, cfg: any, baseUrl: string): Promise<nu
 
   // Check contacts with invite_sent — have they accepted?
   const inviteSent = contacts.getByStatus('invite_sent', user.id) as any[];
-  for (const contact of inviteSent.slice(0, 15)) { // check up to 15 per cycle
+  for (const contact of inviteSent.slice(0, MONITOR_INVITE_BATCH)) {
     if (!contact.linkedin_url) continue;
     const slugMatch = contact.linkedin_url.match(/linkedin\.com\/in\/([a-zA-Z0-9\-_.]+)/);
     if (!slugMatch) continue;
@@ -394,7 +408,7 @@ async function monitorContacts(user: any, cfg: any, baseUrl: string): Promise<nu
         // Check if invite has been pending too long (14 days)
         const createdAt = new Date(contact.created_at).getTime();
         const daysPending = (Date.now() - createdAt) / (1000 * 60 * 60 * 24);
-        if (daysPending > 14) {
+        if (daysPending > INVITE_TIMEOUT_DAYS) {
           contacts.updateStatus(contact.id, 'no_response', user.id);
           updated++;
         }
@@ -404,12 +418,12 @@ async function monitorContacts(user: any, cfg: any, baseUrl: string): Promise<nu
     }
 
     // Small delay between API calls
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, MONITOR_API_DELAY));
   }
 
   // Check contacts with msg_sent — have they replied?
   const msgSent = contacts.getByStatus('msg_sent', user.id) as any[];
-  for (const contact of msgSent.slice(0, 15)) {
+  for (const contact of msgSent.slice(0, MONITOR_REPLY_BATCH)) {
     if (!contact.linkedin_url) continue;
     const slugMatch = contact.linkedin_url.match(/linkedin\.com\/in\/([a-zA-Z0-9\-_.]+)/);
     if (!slugMatch) continue;
@@ -461,7 +475,7 @@ async function monitorContacts(user: any, cfg: any, baseUrl: string): Promise<nu
       // Skip on error
     }
 
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise(r => setTimeout(r, MONITOR_API_DELAY));
   }
 
   return updated;

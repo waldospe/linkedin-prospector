@@ -37,8 +37,21 @@ function initDb() {
   `);
 
   const version = db.prepare('SELECT version FROM schema_version LIMIT 1').get() as { version: number } | undefined;
-
   const currentVersion = version?.version || 0;
+
+  // Pre-migration backup for safety (only if migrating)
+  if (currentVersion > 0 && currentVersion < 16) {
+    try {
+      const backupPath = dbPath + `.pre-v${currentVersion + 1}.bak`;
+      const fs = require('fs');
+      if (!fs.existsSync(backupPath)) {
+        db.backup(backupPath);
+        console.log(`[db] Pre-migration backup: ${backupPath}`);
+      }
+    } catch (e: any) {
+      console.error('[db] Backup failed (continuing):', e.message);
+    }
+  }
 
   if (currentVersion < 2) {
     // Drop old v1 tables if they exist
@@ -285,6 +298,12 @@ function initDb() {
     const tCols = db.pragma('table_info(teams)') as any[];
     if (!tCols.find((c: any) => c.name === 'stripe_customer_id')) {
       db.exec(`ALTER TABLE teams ADD COLUMN stripe_customer_id TEXT`);
+    }
+
+    // Add retry_count to queue for auto-retry
+    const qCols = db.pragma('table_info(queue)') as any[];
+    if (!qCols.find((c: any) => c.name === 'retry_count')) {
+      db.exec(`ALTER TABLE queue ADD COLUMN retry_count INTEGER DEFAULT 0`);
     }
 
     // Performance indexes for common queries
@@ -1013,6 +1032,21 @@ export const queue = {
   },
   clearFailed: (userId: number) => {
     return getDb().prepare('DELETE FROM queue WHERE user_id = ? AND status = ?').run(userId, 'failed');
+  },
+  markRetryable: (id: number, userId: number, error: string) => {
+    const MAX_RETRIES = 3;
+    const item = getDb().prepare('SELECT retry_count FROM queue WHERE id = ? AND user_id = ?').get(id, userId) as any;
+    const retryCount = (item?.retry_count || 0) + 1;
+    if (retryCount >= MAX_RETRIES) {
+      // Permanent failure after max retries
+      return getDb().prepare('UPDATE queue SET status = ?, error = ?, retry_count = ? WHERE id = ? AND user_id = ?')
+        .run('failed', `[permanent after ${MAX_RETRIES} retries] ${error}`, retryCount, id, userId);
+    }
+    // Schedule retry with exponential backoff: 5min, 15min, 45min
+    const delayMs = 5 * 60 * 1000 * Math.pow(3, retryCount - 1);
+    const retryAt = new Date(Date.now() + delayMs).toISOString();
+    return getDb().prepare('UPDATE queue SET status = ?, error = ?, retry_count = ?, scheduled_at = ? WHERE id = ? AND user_id = ?')
+      .run('pending', error, retryCount, retryAt, id, userId);
   },
   deleteByContact: (contactId: number, userId: number) => {
     return getDb().prepare('DELETE FROM queue WHERE contact_id = ? AND user_id = ?').run(contactId, userId);
