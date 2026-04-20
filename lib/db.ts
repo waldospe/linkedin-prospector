@@ -287,6 +287,18 @@ function initDb() {
       db.exec(`ALTER TABLE teams ADD COLUMN stripe_customer_id TEXT`);
     }
 
+    // Performance indexes for common queries
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_contacts_user_id ON contacts(user_id)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_contacts_status ON contacts(user_id, status)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_queue_user_status ON queue(user_id, status)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_queue_contact ON queue(contact_id)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_queue_sequence ON queue(sequence_id)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_queue_scheduled ON queue(user_id, status, scheduled_at)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_messages_contact ON messages(contact_id, user_id)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_daily_stats_date ON daily_stats(date, user_id)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_campaign_contacts ON campaign_contacts(campaign_id, contact_id)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_contact_notes_contact ON contact_notes(contact_id)`);
+
     db.exec('UPDATE schema_version SET version = 16');
   }
 

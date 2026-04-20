@@ -3,6 +3,12 @@ import { queue, contacts, stats, users, globalConfig, templates, messages, seque
 import { substituteVariables } from '@/lib/constants';
 import { sendAlertEmail, sendReplyAlertEmail } from '@/lib/email';
 
+// Fetch wrapper with timeout to prevent hanging on Unipile outages
+const FETCH_TIMEOUT_MS = 15000;
+function fetchWithTimeout(url: string, options?: RequestInit): Promise<Response> {
+  return fetch(url, { ...options, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+}
+
 // Track error rate for alerting
 let consecutiveEmptyCycles = 0;
 let lastAlertSent = 0;
@@ -11,10 +17,10 @@ let lastAlertSent = 0;
 // Called by a cron job every 2-3 minutes. No auth required — secured by a secret token.
 export async function POST(req: NextRequest) {
   try {
-    // Simple secret to prevent unauthorized triggering
+    // Cron secret — must be set in environment
     const authHeader = req.headers.get('authorization');
-    const expectedToken = process.env.CRON_SECRET || 'moco-cron-secret';
-    if (authHeader !== `Bearer ${expectedToken}`) {
+    const expectedToken = process.env.CRON_SECRET;
+    if (!expectedToken || authHeader !== `Bearer ${expectedToken}`) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -184,7 +190,7 @@ export async function POST(req: NextRequest) {
             continue;
           }
 
-          const profileRes = await fetch(
+          const profileRes = await fetchWithTimeout(
             `${baseUrl}/users/${slugMatch[1]}?account_id=${user.unipile_account_id}`,
             { headers: { 'X-API-KEY': cfg.unipile_api_key, 'Accept': 'application/json' } }
           );
@@ -213,7 +219,7 @@ export async function POST(req: NextRequest) {
               continue; // skip without counting toward daily limit
             }
 
-            const res = await fetch(`${baseUrl}/users/invite`, {
+            const res = await fetchWithTimeout(`${baseUrl}/users/invite`, {
               method: 'POST',
               headers: apiHeaders,
               body: JSON.stringify({
@@ -243,7 +249,7 @@ export async function POST(req: NextRequest) {
               continue;
             }
 
-            const msgRes = await fetch(`${baseUrl}/chats`, {
+            const msgRes = await fetchWithTimeout(`${baseUrl}/chats`, {
               method: 'POST',
               headers: apiHeaders,
               body: JSON.stringify({
@@ -280,27 +286,24 @@ export async function POST(req: NextRequest) {
             const steps = typeof item.sequence_steps === 'string' ? JSON.parse(item.sequence_steps) : item.sequence_steps;
             const nextStepIdx = item.step_number;
             if (nextStepIdx < steps.length) {
-              // Dedup: don't create if one already exists
-              const existingNext = getDb().prepare(
-                "SELECT id FROM queue WHERE user_id = ? AND contact_id = ? AND step_number = ? AND status = 'pending'"
-              ).get(user.id, item.contact_id, item.step_number + 1);
-              if (!existingNext) {
-                const nextStep = steps[nextStepIdx];
-                const delayMs = (nextStep.delay_hours || 0) * 60 * 60 * 1000;
-                const scheduledAt = new Date(Date.now() + delayMs).toISOString();
-                const nextMessage = nextStep.template
-                  ? substituteVariables(nextStep.template, contact)
-                  : '';
+              // Atomic dedup: INSERT only if no pending step exists for this contact+step
+              const nextStep = steps[nextStepIdx];
+              const delayMs = (nextStep.delay_hours || 0) * 60 * 60 * 1000;
+              const scheduledAt = new Date(Date.now() + delayMs).toISOString();
+              const nextMessage = nextStep.template
+                ? substituteVariables(nextStep.template, contact)
+                : '';
 
-                queue.create(user.id, {
-                  contact_id: item.contact_id,
-                  sequence_id: item.sequence_id,
-                  step_number: item.step_number + 1,
-                  action_type: nextStep.action,
-                  message_text: nextMessage,
-                  scheduled_at: scheduledAt,
-                });
-              }
+              getDb().prepare(`
+                INSERT INTO queue (user_id, contact_id, sequence_id, step_number, action_type, message_text, scheduled_at)
+                SELECT ?, ?, ?, ?, ?, ?, ?
+                WHERE NOT EXISTS (
+                  SELECT 1 FROM queue WHERE user_id = ? AND contact_id = ? AND step_number = ? AND status = 'pending'
+                )
+              `).run(
+                user.id, item.contact_id, item.sequence_id, item.step_number + 1, nextStep.action, nextMessage, scheduledAt,
+                user.id, item.contact_id, item.step_number + 1,
+              );
             }
           }
 
@@ -326,7 +329,7 @@ export async function POST(req: NextRequest) {
     if (totalErrors > 5 && Date.now() - lastAlertSent > 3600000) {
       lastAlertSent = Date.now();
       const errorSummary = results.flatMap(r => r.errors.map(e => `${r.user}: ${e}`)).join('\n');
-      sendAlertEmail({ subject: `${totalErrors} queue errors this cycle`, body: errorSummary }).catch(() => {});
+      sendAlertEmail({ subject: `${totalErrors} queue errors this cycle`, body: errorSummary }).catch((e) => console.error('[auto-process] Alert email failed:', e.message));
     }
 
     return NextResponse.json({ results, timestamp: new Date().toISOString() });
@@ -349,7 +352,7 @@ async function monitorContacts(user: any, cfg: any, baseUrl: string): Promise<nu
     if (!slugMatch) continue;
 
     try {
-      const res = await fetch(`${baseUrl}/users/${slugMatch[1]}?account_id=${user.unipile_account_id}`, { headers: apiHeaders });
+      const res = await fetchWithTimeout(`${baseUrl}/users/${slugMatch[1]}?account_id=${user.unipile_account_id}`, { headers: apiHeaders });
       if (!res.ok) continue;
 
       const profile = await res.json();
@@ -365,28 +368,26 @@ async function monitorContacts(user: any, cfg: any, baseUrl: string): Promise<nu
           const steps = typeof lastItem.sequence_steps === 'string' ? JSON.parse(lastItem.sequence_steps) : lastItem.sequence_steps;
           const nextStepIdx = lastItem.step_number; // 0-indexed next
           if (nextStepIdx < steps.length) {
-            // Dedup: don't create a follow-up if one already exists for this contact + step
-            const existingNext = getDb().prepare(
-              "SELECT id FROM queue WHERE user_id = ? AND contact_id = ? AND step_number = ? AND status = 'pending'"
-            ).get(user.id, contact.id, lastItem.step_number + 1);
-            if (!existingNext) {
-              const nextStep = steps[nextStepIdx];
-              const contactData = {
-                first_name: contact.first_name, last_name: contact.last_name,
-                name: contact.name, company: contact.company, title: contact.title,
-              };
-              const nextMessage = nextStep.template
-                ? substituteVariables(nextStep.template, contactData)
-                : '';
-              queue.create(user.id, {
-                contact_id: contact.id,
-                sequence_id: lastItem.sequence_id,
-                step_number: lastItem.step_number + 1,
-                action_type: nextStep.action,
-                message_text: nextMessage,
-                scheduled_at: new Date(Date.now() + (nextStep.delay_hours || 0) * 3600000).toISOString(),
-              });
-            }
+            // Atomic dedup: INSERT only if no pending step exists
+            const nextStep = steps[nextStepIdx];
+            const contactData = {
+              first_name: contact.first_name, last_name: contact.last_name,
+              name: contact.name, company: contact.company, title: contact.title,
+            };
+            const nextMessage = nextStep.template
+              ? substituteVariables(nextStep.template, contactData)
+              : '';
+            const scheduledAt = new Date(Date.now() + (nextStep.delay_hours || 0) * 3600000).toISOString();
+            getDb().prepare(`
+              INSERT INTO queue (user_id, contact_id, sequence_id, step_number, action_type, message_text, scheduled_at)
+              SELECT ?, ?, ?, ?, ?, ?, ?
+              WHERE NOT EXISTS (
+                SELECT 1 FROM queue WHERE user_id = ? AND contact_id = ? AND step_number = ? AND status = 'pending'
+              )
+            `).run(
+              user.id, contact.id, lastItem.sequence_id, lastItem.step_number + 1, nextStep.action, nextMessage, scheduledAt,
+              user.id, contact.id, lastItem.step_number + 1,
+            );
           }
         }
       } else {
@@ -415,7 +416,7 @@ async function monitorContacts(user: any, cfg: any, baseUrl: string): Promise<nu
 
     try {
       // Check if there's a chat with this person that has new messages from them
-      const res = await fetch(
+      const res = await fetchWithTimeout(
         `${baseUrl}/users/${slugMatch[1]}?account_id=${user.unipile_account_id}`,
         { headers: apiHeaders }
       );
@@ -424,7 +425,7 @@ async function monitorContacts(user: any, cfg: any, baseUrl: string): Promise<nu
       const providerId = profile.provider_id || profile.id;
 
       // Check chats for messages from this person
-      const chatsRes = await fetch(
+      const chatsRes = await fetchWithTimeout(
         `${baseUrl}/chats?account_id=${user.unipile_account_id}&attendee_id=${providerId}&limit=1`,
         { headers: apiHeaders }
       );
@@ -444,14 +445,15 @@ async function monitorContacts(user: any, cfg: any, baseUrl: string): Promise<nu
 
           // Fire instant reply alert email (if user opted in)
           if (user.email_reply_alerts !== 0 && user.email) {
-            sendReplyAlertEmail({
+            // Fire reply alert — log failures instead of swallowing
+          sendReplyAlertEmail({
               to: user.email,
               userName: user.name,
               contactName: [contact.first_name, contact.last_name].filter(Boolean).join(' ') || contact.name || 'Your contact',
               contactCompany: contact.company,
               contactTitle: contact.title,
               contactId: contact.id,
-            }).catch(() => {});
+            }).catch((e: any) => console.error('[auto-process] Reply alert email failed:', e.message));
           }
         }
       }

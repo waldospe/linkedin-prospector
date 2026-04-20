@@ -34,8 +34,12 @@ export async function POST(req: NextRequest) {
     const endHour = parseInt((schedule.mon?.end || '17:00').split(':')[0]);
     const windowMinutes = (endHour - startHour) * 60;
 
-    // Shuffle IDs for randomization
-    const shuffledIds = [...ids].sort(() => Math.random() - 0.5);
+    // Fisher-Yates shuffle for uniform randomization
+    const shuffledIds = [...ids];
+    for (let i = shuffledIds.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffledIds[i], shuffledIds[j]] = [shuffledIds[j], shuffledIds[i]];
+    }
 
     const db = getDb();
     const queueAfter = db.prepare(`

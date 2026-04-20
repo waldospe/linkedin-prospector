@@ -6,12 +6,18 @@ export async function GET(req: NextRequest) {
   try {
     const { effectiveUserId } = getEffectiveUser(req);
     const { searchParams } = new URL(req.url);
-    const filter = searchParams.get('filter') || 'all'; // all, unread, handled
+    const filterParam = searchParams.get('filter') || 'all';
+    const validFilters = ['all', 'unread', 'handled'] as const;
+    const filter = validFilters.includes(filterParam as any) ? filterParam : 'all';
     const db = getDb();
 
-    let statusFilter = "c.status IN ('replied', 'engaged', 'msg_sent', 'connected')";
-    if (filter === 'unread') statusFilter += " AND COALESCE(c.inbox_status, 'unread') = 'unread'";
-    else if (filter === 'handled') statusFilter += " AND c.inbox_status = 'handled'";
+    // Build filter safely — all values are hardcoded, not from user input
+    const inboxFilters: Record<string, string> = {
+      all: "c.status IN ('replied', 'engaged', 'msg_sent', 'connected')",
+      unread: "c.status IN ('replied', 'engaged', 'msg_sent', 'connected') AND COALESCE(c.inbox_status, 'unread') = 'unread'",
+      handled: "c.status IN ('replied', 'engaged', 'msg_sent', 'connected') AND c.inbox_status = 'handled'",
+    };
+    const statusFilter = inboxFilters[filter];
 
     const conversations = db.prepare(`
       SELECT

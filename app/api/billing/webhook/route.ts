@@ -31,6 +31,9 @@ export async function POST(req: NextRequest) {
         const session = event.data.object as any;
         const teamId = parseInt(session.metadata?.team_id);
         if (teamId && session.subscription) {
+          // Idempotency: skip if subscription already exists
+          const existing = subscriptions.getByStripeSubscriptionId(session.subscription as string);
+          if (existing) break;
           const stripe = getStripe();
           const sub = await stripe.subscriptions.retrieve(session.subscription as string) as any;
           subscriptions.create({
