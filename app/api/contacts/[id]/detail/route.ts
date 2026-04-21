@@ -95,10 +95,42 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
                 );
                 if (chatsRes.ok) {
                   const chatsData = await chatsRes.json();
-                  const chatItems = chatsData.items || chatsData || [];
-                  if (Array.isArray(chatItems) && chatItems.length > 0) {
-                    const chatId = chatItems[0].id;
-                    // Fetch messages in this chat
+                  let chatItems = chatsData.items || chatsData || [];
+                  let chatId = Array.isArray(chatItems) && chatItems.length > 0 ? chatItems[0].id : null;
+
+                  // Fallback: if attendee_id search found no chat, scan recent chats
+                  // for messages from this provider_id (Unipile's attendee filter is unreliable)
+                  if (!chatId) {
+                    try {
+                      const allChatsRes = await fetch(
+                        `${baseUrl}/chats?account_id=${user.unipile_account_id}&limit=50`,
+                        { headers }
+                      );
+                      if (allChatsRes.ok) {
+                        const allChats = await allChatsRes.json();
+                        const allChatItems = allChats.items || allChats || [];
+                        for (const chat of allChatItems) {
+                          const msgsCheck = await fetch(
+                            `${baseUrl}/chats/${chat.id}/messages?limit=3`,
+                            { headers }
+                          );
+                          if (msgsCheck.ok) {
+                            const msgsCheckData = await msgsCheck.json();
+                            const msgs = msgsCheckData.items || msgsCheckData || [];
+                            if (msgs.some((m: any) => (m.sender_id || m.sender?.id) === providerId || (!m.is_sender && msgs.some((m2: any) => m2.is_sender)))) {
+                              // Check specifically for our provider_id
+                              if (msgs.some((m: any) => (m.sender_id || m.sender?.id) === providerId)) {
+                                chatId = chat.id;
+                                break;
+                              }
+                            }
+                          }
+                        }
+                      }
+                    } catch { /* fallback scan failed */ }
+                  }
+
+                  if (chatId) {
                     const msgsRes = await fetch(
                       `${baseUrl}/chats/${chatId}/messages?limit=50`,
                       { headers }

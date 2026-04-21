@@ -445,11 +445,37 @@ async function monitorContacts(user: any, cfg: any, baseUrl: string): Promise<nu
       );
       if (!chatsRes.ok) continue;
       const chatsData = await chatsRes.json();
-      const chatItems = chatsData.items || chatsData || [];
+      let chatItems = chatsData.items || chatsData || [];
+      let foundChatId: string | null = Array.isArray(chatItems) && chatItems.length > 0 ? chatItems[0].id : null;
 
-      if (Array.isArray(chatItems) && chatItems.length > 0) {
-        const chat = chatItems[0];
-        const chatId = chat.id;
+      // Fallback: scan recent chats if attendee_id filter returns empty
+      if (!foundChatId) {
+        try {
+          const allChatsRes = await fetchWithTimeout(
+            `${baseUrl}/chats?account_id=${user.unipile_account_id}&limit=30`,
+            { headers: apiHeaders }
+          );
+          if (allChatsRes.ok) {
+            const allChats = await allChatsRes.json();
+            for (const chat of (allChats.items || [])) {
+              const msgsCheck = await fetchWithTimeout(
+                `${baseUrl}/chats/${chat.id}/messages?limit=3`,
+                { headers: apiHeaders }
+              );
+              if (msgsCheck.ok) {
+                const msgs = (await msgsCheck.json()).items || [];
+                if (msgs.some((m: any) => (m.sender_id || m.sender?.id) === providerId)) {
+                  foundChatId = chat.id;
+                  break;
+                }
+              }
+            }
+          }
+        } catch { /* fallback failed, try next cycle */ }
+      }
+
+      if (foundChatId) {
+        const chat = { id: foundChatId, last_message: chatItems[0]?.last_message };
 
         // Fetch recent messages in the chat to check for ANY reply from them
         // (not just last_message, which misses replies if we sent a follow-up after)
@@ -460,11 +486,11 @@ async function monitorContacts(user: any, cfg: any, baseUrl: string): Promise<nu
           // Simple case: last message is from them
           hasReply = true;
           replyText = chat.last_message.text || chat.last_message.body || null;
-        } else if (chatId) {
+        } else {
           // Check message history — look for any message from them
           try {
             const msgsRes = await fetchWithTimeout(
-              `${baseUrl}/chats/${chatId}/messages?limit=10`,
+              `${baseUrl}/chats/${foundChatId}/messages?limit=10`,
               { headers: apiHeaders }
             );
             if (msgsRes.ok) {
