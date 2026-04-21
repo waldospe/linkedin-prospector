@@ -449,12 +449,41 @@ async function monitorContacts(user: any, cfg: any, baseUrl: string): Promise<nu
 
       if (Array.isArray(chatItems) && chatItems.length > 0) {
         const chat = chatItems[0];
-        // If the last message is from the other person (not us), they replied
+        const chatId = chat.id;
+
+        // Fetch recent messages in the chat to check for ANY reply from them
+        // (not just last_message, which misses replies if we sent a follow-up after)
+        let hasReply = false;
+        let replyText: string | null = null;
+
         if (chat.last_message && chat.last_message.sender_id === providerId) {
+          // Simple case: last message is from them
+          hasReply = true;
+          replyText = chat.last_message.text || chat.last_message.body || null;
+        } else if (chatId) {
+          // Check message history — look for any message from them
+          try {
+            const msgsRes = await fetchWithTimeout(
+              `${baseUrl}/chats/${chatId}/messages?limit=10`,
+              { headers: apiHeaders }
+            );
+            if (msgsRes.ok) {
+              const msgsData = await msgsRes.json();
+              const msgs = msgsData.items || msgsData || [];
+              const theirMessage = msgs.find((m: any) => (m.sender_id || m.sender?.id) === providerId);
+              if (theirMessage) {
+                hasReply = true;
+                replyText = theirMessage.text || theirMessage.body || null;
+              }
+            }
+          } catch { /* message fetch failed, try again next cycle */ }
+        }
+
+        if (hasReply) {
           contacts.updateStatus(contact.id, 'replied', user.id);
           stats.increment('replies_received', user.id, user.timezone);
           messages.markReplied(contact.id, user.id);
-          contactEvents.log(user.id, contact.id, 'reply_received', chat.last_message?.text?.slice(0, 200) || null);
+          contactEvents.log(user.id, contact.id, 'reply_received', replyText?.slice(0, 200) || undefined);
           updated++;
 
           // Fire instant reply alert email (if user opted in)
