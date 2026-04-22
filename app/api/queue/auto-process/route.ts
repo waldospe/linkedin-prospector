@@ -138,20 +138,29 @@ export async function POST(req: NextRequest) {
             continue;
           }
 
-          // Pre-check: if this is a connection request, check contact status in our DB first
-          // This avoids unnecessary API calls and doesn't count toward daily limit
+          // Pre-check contact status before any action
+          const contactStatus = (contacts.getById(item.contact_id, user.id) as any)?.status;
+
+          // If contact has replied or opted out, cancel this item AND all remaining sequence items
+          if (['replied', 'engaged', 'opted_out'].includes(contactStatus)) {
+            queue.updateStatus(item.id, 'completed', user.id);
+            // Cancel all pending sequence items for this contact
+            if (item.sequence_id) {
+              getDb().prepare(
+                "UPDATE queue SET status = 'completed', error = 'Cancelled: contact replied' WHERE user_id = ? AND contact_id = ? AND sequence_id = ? AND status = 'pending'"
+              ).run(user.id, item.contact_id, item.sequence_id);
+            }
+            skipped.push(item.id);
+            continue;
+          }
+
           if (item.action_type === 'connection') {
-            const contactStatus = (contacts.getById(item.contact_id, user.id) as any)?.status;
             if (contactStatus === 'invite_sent' || contactStatus === 'invite_pending') {
-              // Already have a pending invite — skip, don't count
-              // Skip: ${item.contact_name} — invite already pending (${contactStatus})`);
               queue.updateStatus(item.id, 'completed', user.id);
               skipped.push(item.id);
               continue;
             }
-            if (contactStatus === 'connected' || contactStatus === 'msg_sent' || contactStatus === 'replied' || contactStatus === 'engaged') {
-              // Already connected — skip entire connection sequence
-              // Skip: ${item.contact_name} — already ${contactStatus}`);
+            if (contactStatus === 'connected' || contactStatus === 'msg_sent') {
               queue.updateStatus(item.id, 'completed', user.id);
               skipped.push(item.id);
               continue;
@@ -258,6 +267,33 @@ export async function POST(req: NextRequest) {
               errors.push(`${item.contact_name}: not connected`);
               continue;
             }
+
+            // Live reply check: before sending, verify they haven't replied on LinkedIn
+            // This catches replies our monitor hasn't detected yet
+            try {
+              const chatsCheck = await fetchWithTimeout(
+                `${baseUrl}/chats?account_id=${user.unipile_account_id}&attendee_id=${providerId}&limit=1`,
+                { headers: apiHeaders }
+              );
+              if (chatsCheck.ok) {
+                const chatsCheckData = await chatsCheck.json();
+                const chatCheck = (chatsCheckData.items || [])[0];
+                if (chatCheck?.last_message?.sender_id === providerId) {
+                  // They replied — cancel this message and the rest of the sequence
+                  contacts.updateStatus(item.contact_id, 'replied', user.id);
+                  stats.increment('replies_received', user.id, user.timezone);
+                  contactEvents.log(user.id, item.contact_id, 'reply_received', chatCheck.last_message?.text?.slice(0, 200) || undefined);
+                  queue.updateStatus(item.id, 'completed', user.id);
+                  if (item.sequence_id) {
+                    getDb().prepare(
+                      "UPDATE queue SET status = 'completed', error = 'Cancelled: contact replied' WHERE user_id = ? AND contact_id = ? AND sequence_id = ? AND status = 'pending'"
+                    ).run(user.id, item.contact_id, item.sequence_id);
+                  }
+                  skipped.push(item.id);
+                  continue;
+                }
+              }
+            } catch { /* reply check failed, proceed with send */ }
 
             const msgRes = await fetchWithTimeout(`${baseUrl}/chats`, {
               method: 'POST',
