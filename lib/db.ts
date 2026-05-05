@@ -1583,6 +1583,7 @@ export const accountHealth = {
       SELECT
         SUM(CASE WHEN action_type = 'connection' AND status = 'completed' THEN 1 ELSE 0 END) as invites_sent,
         SUM(CASE WHEN action_type = 'connection' AND status = 'failed' THEN 1 ELSE 0 END) as invites_failed,
+        SUM(CASE WHEN action_type = 'connection' AND status = 'failed' AND error LIKE '%cannot_resend_yet%' THEN 1 ELSE 0 END) as invites_rate_limited,
         SUM(CASE WHEN action_type = 'message' AND status = 'completed' THEN 1 ELSE 0 END) as messages_sent,
         SUM(CASE WHEN action_type = 'message' AND status = 'failed' THEN 1 ELSE 0 END) as messages_failed
       FROM queue WHERE user_id = ? AND executed_at >= datetime('now', '-30 days')
@@ -1596,7 +1597,9 @@ export const accountHealth = {
 
     const statusMap = Object.fromEntries(contactStats.map(r => [r.status, r.cnt]));
     const invitesSent = recentQueue?.invites_sent || 0;
-    const invitesFailed = recentQueue?.invites_failed || 0;
+    const invitesRateLimited = recentQueue?.invites_rate_limited || 0;
+    // Don't count rate limits as real failures — they're temporary
+    const invitesFailed = (recentQueue?.invites_failed || 0) - invitesRateLimited;
     const messagesSent = recentQueue?.messages_sent || 0;
     const messagesFailed = recentQueue?.messages_failed || 0;
     const connected = (statusMap.connected || 0) + (statusMap.msg_sent || 0) + (statusMap.replied || 0) + (statusMap.engaged || 0);
@@ -1631,11 +1634,12 @@ export const accountHealth = {
     if (errorRate > 20) warnings.push('High error rate — some messages are failing to send.');
     if (negativeRate > 10) warnings.push('High opt-out/decline rate — reduce volume or improve personalization.');
     if (invitesFailed > 5) warnings.push(`${invitesFailed} connection requests failed in the last 30 days.`);
+    if (invitesRateLimited > 10) warnings.push(`${invitesRateLimited} requests hit LinkedIn rate limits — consider reducing daily volume or enabling warmup.`);
 
     return {
       score, level, acceptRate, errorRate, negativeRate, warnings,
       invitesSent, connected, messagesSent, declined, optedOut,
-      invitesFailed, messagesFailed,
+      invitesFailed, messagesFailed, invitesRateLimited,
     };
   },
 };

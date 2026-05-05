@@ -95,7 +95,26 @@ export async function POST(req: NextRequest) {
   }
   actions['invalid_recipient_resolved'] = invalidRecipient.length;
 
-  // ─── 6. "No LinkedIn URL" → permanent ──
+  // ─── 6. "cannot_resend_yet" (LinkedIn rate limit) → retry with longer delay ──
+  const rateLimited = db.prepare(`
+    UPDATE queue SET status = 'pending', error = NULL,
+      retry_count = COALESCE(retry_count, 0) + 1,
+      scheduled_at = datetime('now', '+' || (COALESCE(retry_count, 0) + 1) || ' hours')
+    WHERE status = 'failed' AND error LIKE '%cannot_resend_yet%'
+      AND COALESCE(retry_count, 0) < 5
+  `).run();
+  actions['rate_limited_retried'] = rateLimited.changes;
+
+  // Permanently fail rate-limited items retried 5+ times
+  const rateLimitedPerm = db.prepare(`
+    UPDATE queue SET status = 'completed',
+      error = 'Resolved: LinkedIn rate limit after retries'
+    WHERE status = 'failed' AND error LIKE '%cannot_resend_yet%'
+      AND COALESCE(retry_count, 0) >= 5
+  `).run();
+  actions['rate_limited_permanent'] = rateLimitedPerm.changes;
+
+  // ─── 7. "No LinkedIn URL" → permanent ──
   const noUrl = db.prepare(`
     UPDATE queue SET status = 'completed', error = 'Resolved: no LinkedIn URL'
     WHERE status = 'failed' AND error = 'No LinkedIn URL'
