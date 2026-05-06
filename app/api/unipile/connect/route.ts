@@ -13,16 +13,32 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unipile API not configured. Contact your admin.' }, { status: 400 });
     }
 
-    if (user?.unipile_account_id && user.unipile_account_id !== 'pending') {
-      return NextResponse.json({ error: 'LinkedIn account already connected' }, { status: 400 });
-    }
-
     const dsn = cfg.unipile_dsn || 'api21.unipile.com:15135';
     const apiUrl = `https://${dsn}`;
     const appUrl = process.env.NEXTAUTH_URL || process.env.APP_URL || 'https://lp.moco.inc';
-
-    // Set expiration to 1 hour from now
     const expiresOn = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+
+    // If user already has an account ID, generate a reconnect link instead of a new connection
+    const isReconnect = user?.unipile_account_id && user.unipile_account_id !== 'pending';
+    const body = isReconnect
+      ? {
+          type: 'reconnect',
+          reconnect_account: user.unipile_account_id,
+          api_url: apiUrl,
+          expiresOn,
+          name: String(userId),
+          notify_url: `${appUrl}/api/unipile/callback`,
+          success_redirect_url: `${appUrl}/settings?linked=success`,
+        }
+      : {
+          type: 'create',
+          providers: ['LINKEDIN'],
+          api_url: apiUrl,
+          expiresOn,
+          name: String(userId),
+          notify_url: `${appUrl}/api/unipile/callback`,
+          success_redirect_url: `${appUrl}/settings?linked=success`,
+        };
 
     const res = await fetch(`${apiUrl}/api/v1/hosted/accounts/link`, {
       method: 'POST',
@@ -31,15 +47,7 @@ export async function POST(req: NextRequest) {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
       },
-      body: JSON.stringify({
-        type: 'create',
-        providers: ['LINKEDIN'],
-        api_url: apiUrl,
-        expiresOn,
-        name: String(userId), // internal user ID for callback
-        notify_url: `${appUrl}/api/unipile/callback`,
-        success_redirect_url: `${appUrl}/settings?linked=success`,
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!res.ok) {
