@@ -626,7 +626,7 @@ export default function SettingsPage() {
 
       {/* Sticky save bar — applies to every section except security (password has its own button) */}
       {activeSection !== 'security' && (
-        <div className="fixed bottom-0 left-[250px] right-0 bg-background/80 backdrop-blur-md border-t border-border z-20">
+        <div className="fixed bottom-0 left-0 md:left-[250px] right-0 bg-background/80 backdrop-blur-md border-t border-border z-20">
           <div className="max-w-6xl mx-auto px-8 py-4 flex items-center justify-end gap-3">
             <span className="t-caption">Changes apply to your settings only.</span>
             <button

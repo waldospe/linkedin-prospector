@@ -222,6 +222,14 @@ export default function SearchPage() {
             <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-widest">
               Results {paging?.total_count ? `(${paging.total_count.toLocaleString()})` : results.length > 0 ? `(${results.length})` : ''}
             </h2>
+            {results.length > 0 && addedIds.size > 0 && (
+              <a
+                href={`/campaigns/new`}
+                className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-violet-500/10 text-violet-400 border border-violet-500/15 hover:bg-violet-500/20 transition-all"
+              >
+                Launch as Campaign <ArrowRight size={11} />
+              </a>
+            )}
           </div>
 
           {results.length === 0 && !searching ? (

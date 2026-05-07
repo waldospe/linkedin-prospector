@@ -114,7 +114,24 @@ export async function POST(req: NextRequest) {
   `).run();
   actions['rate_limited_permanent'] = rateLimitedPerm.changes;
 
-  // ─── 7. "No LinkedIn URL" → permanent ──
+  // ─── 7. "disconnected_account" → pause queue + alert user ──
+  const disconnected = db.prepare(`
+    SELECT DISTINCT q.user_id FROM queue q
+    WHERE q.status = 'failed' AND q.error LIKE '%disconnected_account%'
+  `).all() as Array<{ user_id: number }>;
+  for (const { user_id } of disconnected) {
+    // Pause all pending items for this user
+    const paused = db.prepare(
+      "UPDATE queue SET status = 'paused', error = 'Paused: LinkedIn disconnected' WHERE user_id = ? AND status = 'pending'"
+    ).run(user_id);
+    // Mark the disconnected failures as resolved
+    db.prepare(
+      "UPDATE queue SET status = 'completed', error = 'Resolved: LinkedIn disconnected — queue paused' WHERE user_id = ? AND status = 'failed' AND error LIKE '%disconnected_account%'"
+    ).run(user_id);
+    actions[`disconnected_user_${user_id}_paused`] = paused.changes;
+  }
+
+  // ─── 8. "No LinkedIn URL" → permanent ──
   const noUrl = db.prepare(`
     UPDATE queue SET status = 'completed', error = 'Resolved: no LinkedIn URL'
     WHERE status = 'failed' AND error = 'No LinkedIn URL'

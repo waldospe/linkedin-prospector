@@ -4,32 +4,17 @@ import { useEffect, useState } from 'react';
 import { useUser } from '@/components/user-context';
 import { FUNNEL_STAGES, POSITIVE_STAGES, STAGE_MAP, stageColors } from '@/lib/constants';
 import {
-  Users,
-  Send,
-  MessageCircle,
-  Reply,
-  ListTodo,
-  CheckCircle2,
-  Clock,
-  TrendingUp,
+  Users, Send, MessageCircle, Reply, ListTodo, CheckCircle2, Clock,
+  TrendingUp, TrendingDown, AlertTriangle, ArrowRight, Inbox, Megaphone,
+  ExternalLink, Wifi, WifiOff,
 } from 'lucide-react';
+import Link from 'next/link';
 import SinceYouWereGone from '@/components/since-you-were-gone';
 import { QuickStart } from '@/components/quick-start';
+import ContactDetail from '@/components/contact-detail';
 
-interface Stats {
-  today: {
-    connections_sent: number;
-    messages_sent: number;
-    replies_received: number;
-  };
-}
-
-interface QueueItem {
-  id: number;
-  contact_name: string;
-  action_type: string;
-  status: string;
-}
+interface Stats { today: { connections_sent: number; messages_sent: number; replies_received: number } }
+interface QueueItem { id: number; contact_name: string; action_type: string; status: string }
 
 export default function DashboardPage() {
   const { currentUser, viewAs, viewingUser, isViewingAll, apiQuery } = useUser();
@@ -38,11 +23,14 @@ export default function DashboardPage() {
   const [funnel, setFunnel] = useState<Array<{ status: string; count: number }>>([]);
   const [loading, setLoading] = useState(true);
   const [health, setHealth] = useState<any>(null);
+  const [dashboard, setDashboard] = useState<any>(null);
+  const [selectedContact, setSelectedContact] = useState<number | null>(null);
 
   useEffect(() => {
     if (currentUser) {
       fetchData();
       fetch(`/api/account-health${apiQuery}`).then(r => r.json()).then(setHealth).catch(() => {});
+      fetch(`/api/dashboard${apiQuery}`).then(r => r.json()).then(setDashboard).catch(() => {});
     }
   }, [currentUser, viewAs]);
 
@@ -50,41 +38,41 @@ export default function DashboardPage() {
     try {
       const q = apiQuery;
       const [statsRes, queueRes, funnelRes] = await Promise.all([
-        fetch(`/api/stats${q}`),
-        fetch(`/api/queue${q}`),
-        fetch(`/api/contacts/funnel${q}`),
+        fetch(`/api/stats${q}`), fetch(`/api/queue${q}`), fetch(`/api/contacts/funnel${q}`),
       ]);
-      const [statsData, queueData, funnelData] = await Promise.all([
-        statsRes.json(), queueRes.json(), funnelRes.json(),
-      ]);
+      const [statsData, queueData, funnelData] = await Promise.all([statsRes.json(), queueRes.json(), funnelRes.json()]);
       setStats(statsData);
       setQueue(Array.isArray(queueData) ? queueData : []);
       setFunnel(Array.isArray(funnelData) ? funnelData : []);
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
-
-  // Queue is now auto-processed by cron — no manual button needed
 
   const pendingCount = queue.filter(q => q.status === 'pending').length;
   const failedCount = queue.filter(q => q.status === 'failed').length;
   const dailyLimit = currentUser?.daily_limit || 20;
   const dailyUsed = stats.today.connections_sent;
   const dailyProgress = Math.min((dailyUsed / dailyLimit) * 100, 100);
-
   const totalContacts = funnel.reduce((sum, f) => sum + f.count, 0);
   const funnelMap = Object.fromEntries(funnel.map(f => [f.status, f.count]));
-
-  // Connections accepted = everyone who reached 'connected' or beyond
   const connectedStatuses = ['connected', 'msg_sent', 'replied', 'engaged'];
   const connectionsAccepted = connectedStatuses.reduce((sum, s) => sum + (funnelMap[s] || 0), 0);
 
+  const displayName = (c: any) => [c.first_name, c.last_name].filter(Boolean).join(' ') || c.name || 'Unknown';
+
+  const trendArrow = (current: number, previous: number) => {
+    if (previous === 0) return null;
+    const pct = Math.round(((current - previous) / previous) * 100);
+    if (pct === 0) return null;
+    return pct > 0
+      ? <span className="inline-flex items-center gap-0.5 text-[10px] text-emerald-400"><TrendingUp size={10} />+{pct}%</span>
+      : <span className="inline-flex items-center gap-0.5 text-[10px] text-red-400"><TrendingDown size={10} />{pct}%</span>;
+  };
+
   const statCards = [
-    { label: 'Connected', value: connectionsAccepted, icon: Users, color: 'blue' },
-    { label: 'Invites Sent', value: stats.today.connections_sent, icon: Send, color: 'indigo' },
-    { label: 'Messages', value: stats.today.messages_sent, icon: MessageCircle, color: 'emerald' },
-    { label: 'Replies', value: stats.today.replies_received, icon: Reply, color: 'violet' },
+    { label: 'Connected', value: connectionsAccepted, icon: Users, color: 'blue', trend: dashboard?.trend?.connections },
+    { label: 'Invites Today', value: stats.today.connections_sent, icon: Send, color: 'indigo', trend: null },
+    { label: 'Messages', value: stats.today.messages_sent, icon: MessageCircle, color: 'emerald', trend: null },
+    { label: 'Replies', value: stats.today.replies_received, icon: Reply, color: 'violet', trend: dashboard?.trend?.replies },
   ];
 
   const iconColors: Record<string, string> = {
@@ -95,10 +83,78 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <SinceYouWereGone />
       <QuickStart />
-      {/* Header */}
+
+      {/* Alerts — top priority */}
+      {dashboard?.alerts?.length > 0 && (
+        <div className="space-y-2">
+          {dashboard.alerts.map((alert: any, i: number) => (
+            <div key={i} className={`flex items-center gap-3 px-4 py-3 rounded-xl border ${
+              alert.severity === 'error' ? 'bg-red-500/10 border-red-500/25' :
+              alert.severity === 'warning' ? 'bg-amber-500/10 border-amber-500/25' :
+              'bg-blue-500/[0.06] border-blue-500/20'
+            }`}>
+              {alert.severity === 'error' ? <WifiOff size={16} className="text-red-400 shrink-0" /> :
+               alert.severity === 'warning' ? <AlertTriangle size={16} className="text-amber-400 shrink-0" /> :
+               <Clock size={16} className="text-blue-400 shrink-0" />}
+              <p className={`text-sm flex-1 ${
+                alert.severity === 'error' ? 'text-red-300' :
+                alert.severity === 'warning' ? 'text-amber-300' : 'text-blue-300'
+              }`}>{alert.message}</p>
+              {alert.actionUrl && (
+                <Link href={alert.actionUrl} className={`text-xs font-medium shrink-0 px-3 py-1.5 rounded-lg transition-all ${
+                  alert.severity === 'error' ? 'bg-red-500/20 text-red-300 hover:bg-red-500/30' :
+                  alert.severity === 'warning' ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30' :
+                  'bg-blue-500/15 text-blue-300 hover:bg-blue-500/25'
+                }`}>
+                  {alert.action} <ArrowRight size={11} className="inline ml-1" />
+                </Link>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Reply to these people — action #1 */}
+      {dashboard?.needsReply?.length > 0 && (
+        <div className="glass rounded-2xl p-5 border border-emerald-500/20 bg-emerald-500/[0.02]">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Inbox size={16} className="text-emerald-400" />
+              <span className="h-card">Reply to these people</span>
+              <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/15 px-1.5 py-0.5 rounded">{dashboard.needsReply.length}</span>
+            </div>
+            <Link href="/inbox" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+              View inbox <ArrowRight size={11} className="inline ml-0.5" />
+            </Link>
+          </div>
+          <div className="space-y-2">
+            {dashboard.needsReply.slice(0, 5).map((c: any) => (
+              <button key={c.id} onClick={() => setSelectedContact(c.id)} className="w-full flex items-center gap-3 p-3 rounded-xl bg-secondary/30 hover:bg-secondary/50 border border-transparent hover:border-border/30 transition-all text-left">
+                {c.avatar_url && c.avatar_url !== 'none' ? (
+                  <img src={c.avatar_url} alt="" className="w-9 h-9 rounded-full object-cover border border-border shrink-0" />
+                ) : (
+                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-500/15 to-blue-500/15 border border-emerald-500/10 flex items-center justify-center text-xs font-semibold text-emerald-300 shrink-0">
+                    {(c.first_name || c.name || '?').charAt(0)}
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground">{displayName(c)}</p>
+                  <p className="text-xs text-muted-foreground truncate">{c.title}{c.title && c.company ? ' at ' : ''}{c.company}</p>
+                </div>
+                {c.reply_preview && (
+                  <p className="text-xs text-emerald-400/70 truncate max-w-[200px]">"{c.reply_preview}"</p>
+                )}
+                <ArrowRight size={14} className="text-muted-foreground shrink-0" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Header + stat cards */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="h-page">
@@ -111,27 +167,19 @@ export default function DashboardPage() {
         <div className="flex items-center gap-3">
           {pendingCount > 0 && (
             <span className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/15">
-              <Clock className="w-3.5 h-3.5" />
-              {pendingCount} queued
-            </span>
-          )}
-          {failedCount > 0 && (
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 border border-red-500/15">
-              {failedCount} failed
+              <Clock className="w-3.5 h-3.5" /> {pendingCount} queued
             </span>
           )}
           {pendingCount === 0 && failedCount === 0 && (
             <span className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/15">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              All clear
+              <CheckCircle2 className="w-3.5 h-3.5" /> All clear
             </span>
           )}
         </div>
       </div>
 
-      {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
-        {statCards.map(({ label, value, icon: Icon, color }, idx) => (
+        {statCards.map(({ label, value, icon: Icon, color, trend }, idx) => (
           <div key={label} className="glass rounded-2xl p-5 animate-slide-up" style={{ animationDelay: `${idx * 60}ms` }}>
             <div className="flex items-center justify-between mb-4">
               <span className="t-eyebrow">{label}</span>
@@ -139,90 +187,145 @@ export default function DashboardPage() {
                 <Icon size={16} />
               </div>
             </div>
-            <p className="text-3xl font-semibold text-foreground tabular-nums leading-none animate-count-up">{value}</p>
+            <div className="flex items-baseline gap-2">
+              <p className="text-3xl font-semibold text-foreground tabular-nums leading-none">{value}</p>
+              {trend && trendArrow(trend.current, trend.previous)}
+            </div>
           </div>
         ))}
       </div>
 
-      {/* Daily progress */}
-      <div className="glass rounded-2xl p-6">
-        <div className="flex items-center justify-between mb-5">
-          <div className="flex items-center gap-2.5">
-            <TrendingUp size={16} className="text-blue-400" />
-            <span className="text-sm font-semibold text-foreground">Daily Connection Limit</span>
+      {/* Campaign progress cards */}
+      {dashboard?.campaignProgress?.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Megaphone size={16} className="text-violet-400" />
+              <span className="h-card">Active Campaigns</span>
+            </div>
+            <Link href="/campaigns" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+              All campaigns <ArrowRight size={11} className="inline ml-0.5" />
+            </Link>
           </div>
-          <div className="flex items-baseline gap-1">
-            <span className="text-lg font-bold text-foreground tabular-nums">{dailyUsed}</span>
-            <span className="text-sm text-muted-foreground">/ {dailyLimit}</span>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            {dashboard.campaignProgress.map((c: any) => {
+              const pct = c.actions_total > 0 ? Math.round((c.actions_done / c.actions_total) * 100) : 0;
+              return (
+                <Link key={c.id} href={`/campaigns/${c.id}`} className="glass glass-hover rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-foreground">{c.name}</span>
+                    <span className={`text-xs font-medium ${pct === 100 ? 'text-emerald-400' : 'text-blue-400'}`}>{pct}%</span>
+                  </div>
+                  <div className="h-1.5 bg-secondary rounded-full overflow-hidden mb-2">
+                    <div className={`h-full ${pct === 100 ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{ width: `${pct}%` }} />
+                  </div>
+                  <div className="flex items-center gap-4 t-caption">
+                    <span>{c.total} contacts</span>
+                    <span>{c.connected} connected</span>
+                    <span className="text-emerald-400">{c.replied} replied</span>
+                  </div>
+                </Link>
+              );
+            })}
           </div>
         </div>
-        <div className="h-2.5 bg-secondary rounded-full overflow-hidden">
-          <div
-            className="h-full rounded-full transition-all duration-700 ease-out"
-            style={{
+      )}
+
+      {/* Connected but no message — needs attention */}
+      {dashboard?.connectedNoMsg?.length > 0 && (
+        <div className="glass rounded-xl p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <Users size={16} className="text-cyan-400" />
+            <span className="h-card">Connected — send them a message</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {dashboard.connectedNoMsg.map((c: any) => (
+              <button key={c.id} onClick={() => setSelectedContact(c.id)} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-secondary/30 hover:bg-secondary/50 border border-border/50 hover:border-border transition-all text-sm">
+                {c.avatar_url && c.avatar_url !== 'none' ? (
+                  <img src={c.avatar_url} alt="" className="w-6 h-6 rounded-full object-cover" />
+                ) : (
+                  <div className="w-6 h-6 rounded-full bg-cyan-500/15 flex items-center justify-center text-[10px] font-bold text-cyan-300">
+                    {(c.first_name || c.name || '?').charAt(0)}
+                  </div>
+                )}
+                <span className="text-foreground">{displayName(c)}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Daily progress + Health side by side */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="glass rounded-2xl p-6">
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-2.5">
+              <TrendingUp size={16} className="text-blue-400" />
+              <span className="text-sm font-semibold text-foreground">Daily Connection Limit</span>
+            </div>
+            <div className="flex items-baseline gap-1">
+              <span className="text-lg font-bold text-foreground tabular-nums">{dailyUsed}</span>
+              <span className="text-sm text-muted-foreground">/ {dailyLimit}</span>
+            </div>
+          </div>
+          <div className="h-2.5 bg-secondary rounded-full overflow-hidden">
+            <div className="h-full rounded-full transition-all duration-700 ease-out" style={{
               width: `${dailyProgress}%`,
               background: dailyProgress >= 100
                 ? 'linear-gradient(90deg, hsl(0 72% 51%), hsl(15 80% 50%))'
                 : 'linear-gradient(90deg, hsl(220 90% 56%), hsl(260 80% 55%))',
-            }}
-          />
+            }} />
+          </div>
+          <p className="text-xs text-muted-foreground mt-3 font-medium">
+            {dailyProgress >= 100 ? 'Connection limit reached — messages still sending' : `${Math.round(100 - dailyProgress)}% remaining`}
+          </p>
         </div>
-        <p className="text-xs text-muted-foreground mt-3 font-medium">
-          {dailyProgress >= 100 ? '🎯 Connection limit reached — messages still sending' : `${Math.round(100 - dailyProgress)}% remaining`}
-        </p>
-      </div>
 
-      {/* Account Health */}
-      {health && (
-        <div className={`glass rounded-2xl p-6 border ${
-          health.level === 'excellent' ? 'border-emerald-500/20' :
-          health.level === 'good' ? 'border-blue-500/20' :
-          health.level === 'caution' ? 'border-amber-500/20' :
-          'border-red-500/20'
-        }`}>
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2.5">
+        {health && (
+          <div className={`glass rounded-2xl p-6 border ${
+            health.level === 'excellent' ? 'border-emerald-500/20' :
+            health.level === 'good' ? 'border-blue-500/20' :
+            health.level === 'caution' ? 'border-amber-500/20' : 'border-red-500/20'
+          }`}>
+            <div className="flex items-center justify-between mb-4">
               <span className="text-sm font-semibold text-foreground">Account Health</span>
+              <div className="flex items-baseline gap-2">
+                <span className={`text-2xl font-bold tabular-nums ${
+                  health.level === 'excellent' ? 'text-emerald-400' :
+                  health.level === 'good' ? 'text-blue-400' :
+                  health.level === 'caution' ? 'text-amber-400' : 'text-red-400'
+                }`}>{health.score}</span>
+                <span className="text-xs text-muted-foreground">/ 100</span>
+              </div>
             </div>
-            <div className="flex items-baseline gap-2">
-              <span className={`text-2xl font-bold tabular-nums ${
-                health.level === 'excellent' ? 'text-emerald-400' :
-                health.level === 'good' ? 'text-blue-400' :
-                health.level === 'caution' ? 'text-amber-400' :
-                'text-red-400'
-              }`}>{health.score}</span>
-              <span className="text-xs text-muted-foreground">/ 100</span>
+            <div className="h-2 bg-secondary rounded-full overflow-hidden mb-3">
+              <div className={`h-full rounded-full transition-all ${
+                health.level === 'excellent' ? 'bg-emerald-500' :
+                health.level === 'good' ? 'bg-blue-500' :
+                health.level === 'caution' ? 'bg-amber-500' : 'bg-red-500'
+              }`} style={{ width: `${health.score}%` }} />
             </div>
-          </div>
-          <div className="h-2 bg-secondary rounded-full overflow-hidden mb-3">
-            <div className={`h-full rounded-full transition-all ${
-              health.level === 'excellent' ? 'bg-emerald-500' :
-              health.level === 'good' ? 'bg-blue-500' :
-              health.level === 'caution' ? 'bg-amber-500' :
-              'bg-red-500'
-            }`} style={{ width: `${health.score}%` }} />
-          </div>
-          <div className="grid grid-cols-4 gap-3 text-center">
-            <div><p className="text-lg font-semibold text-foreground tabular-nums">{health.acceptRate}%</p><p className="t-caption">Accept</p></div>
-            <div><p className="text-lg font-semibold text-foreground tabular-nums">{health.invitesSent}</p><p className="t-caption">Invites</p></div>
-            <div><p className="text-lg font-semibold text-foreground tabular-nums">{health.connected}</p><p className="t-caption">Connected</p></div>
-            <div><p className="text-lg font-semibold text-foreground tabular-nums">{health.messagesSent}</p><p className="t-caption">Messages</p></div>
-          </div>
-          {health.warnings.length > 0 && (
-            <div className="mt-4 space-y-1.5">
-              {health.warnings.map((w: string, i: number) => (
-                <p key={i} className="text-xs text-amber-400/80 flex items-start gap-1.5">
-                  <span className="shrink-0 mt-0.5">⚠</span> {w}
-                </p>
-              ))}
+            <div className="grid grid-cols-4 gap-2 text-center">
+              <div><p className="text-base font-semibold text-foreground tabular-nums">{health.acceptRate}%</p><p className="t-caption">Accept</p></div>
+              <div><p className="text-base font-semibold text-foreground tabular-nums">{health.invitesSent}</p><p className="t-caption">Invites</p></div>
+              <div><p className="text-base font-semibold text-foreground tabular-nums">{health.connected}</p><p className="t-caption">Connected</p></div>
+              <div><p className="text-base font-semibold text-foreground tabular-nums">{health.messagesSent}</p><p className="t-caption">Messages</p></div>
             </div>
-          )}
-        </div>
-      )}
+            {health.warnings.length > 0 && (
+              <div className="mt-3 space-y-1">
+                {health.warnings.map((w: string, i: number) => (
+                  <p key={i} className="text-[11px] text-amber-400/80 flex items-start gap-1.5">
+                    <span className="shrink-0">⚠</span> {w}
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Funnel + Queue */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Funnel */}
         <div className="glass rounded-xl p-5">
           <div className="flex items-center gap-2 mb-5">
             <TrendingUp size={16} className="text-muted-foreground" />
@@ -260,16 +363,18 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Pending queue */}
         <div className="glass rounded-xl p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <ListTodo size={16} className="text-muted-foreground" />
-            <span className="text-sm font-medium text-foreground">Pending Queue</span>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <ListTodo size={16} className="text-muted-foreground" />
+              <span className="text-sm font-medium text-foreground">Pending Queue</span>
+            </div>
+            <Link href="/queue" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+              View all <ArrowRight size={11} className="inline ml-0.5" />
+            </Link>
           </div>
           {loading ? (
-            <div className="space-y-2">
-              {[...Array(3)].map((_, i) => <div key={i} className="h-14 bg-secondary rounded-lg animate-pulse" />)}
-            </div>
+            <div className="space-y-2">{[...Array(3)].map((_, i) => <div key={i} className="h-14 bg-secondary rounded-lg animate-pulse" />)}</div>
           ) : pendingCount === 0 ? (
             <div className="py-8 text-center">
               <CheckCircle2 className="w-8 h-8 text-emerald-500/30 mx-auto mb-2" />
@@ -287,15 +392,15 @@ export default function DashboardPage() {
                     item.action_type === 'connection'
                       ? 'bg-blue-500/10 text-blue-400 border-blue-500/15'
                       : 'bg-indigo-500/10 text-indigo-400 border-indigo-500/15'
-                  }`}>
-                    {item.action_type}
-                  </span>
+                  }`}>{item.action_type}</span>
                 </div>
               ))}
             </div>
           )}
         </div>
       </div>
+
+      {selectedContact && <ContactDetail contactId={selectedContact} onClose={() => setSelectedContact(null)} />}
     </div>
   );
 }

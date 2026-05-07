@@ -138,10 +138,10 @@ export default function ContactDetail({ contactId, onClose }: ContactDetailProps
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
 
       {/* Panel */}
-      <div className="absolute right-0 top-0 bottom-0 w-full max-w-[800px] bg-background border-l border-border flex animate-slide-in-right overflow-hidden">
+      <div className="absolute right-0 top-0 bottom-0 w-full md:max-w-[800px] bg-background border-l border-border flex flex-col md:flex-row animate-slide-in-right overflow-hidden">
 
         {/* Left: Profile Card */}
-        <div className="w-[320px] border-r border-border p-6 overflow-y-auto shrink-0">
+        <div className="w-full md:w-[320px] border-b md:border-b-0 md:border-r border-border p-4 md:p-6 overflow-y-auto shrink-0 max-h-[40vh] md:max-h-none">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-widest">Contact</h2>
             <button onClick={onClose} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-white/5 transition-all">
