@@ -46,6 +46,7 @@ export async function POST(req: NextRequest) {
         inviterName: admin?.name || 'Admin',
         token,
         teamName: team?.name,
+        cc: data.cc ? (Array.isArray(data.cc) ? data.cc : [data.cc]) : undefined,
       });
       emailSent = true;
     } catch (err: any) {

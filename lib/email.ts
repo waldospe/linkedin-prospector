@@ -20,8 +20,9 @@ export async function sendInviteEmail(opts: {
   inviterName: string;
   token: string;
   teamName?: string;
+  cc?: string[];
 }) {
-  const { to, name, inviterName, token, teamName } = opts;
+  const { to, name, inviterName, token, teamName, cc } = opts;
   const setupUrl = `${APP_URL}/invite/${token}`;
 
   const html = `
@@ -60,6 +61,7 @@ export async function sendInviteEmail(opts: {
   return getResend().emails.send({
     from: FROM_EMAIL,
     to,
+    cc: cc || undefined,
     subject: `${inviterName} invited you to LinkedIn Prospector`,
     html,
   });
