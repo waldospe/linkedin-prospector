@@ -30,20 +30,27 @@ export default function ContactDetail({ contactId, onClose }: ContactDetailProps
 
   useEffect(() => {
     fetchDetail();
-    fetch(`/api/contacts/${contactId}/labels`).then(r => r.json()).then(d => { if (Array.isArray(d)) setContactLabels(d); });
-    fetch('/api/labels').then(r => r.json()).then(d => { if (Array.isArray(d)) setAllLabels(d); });
-    fetch(`/api/contacts/${contactId}/events`).then(r => r.json()).then(d => { if (Array.isArray(d)) setTimeline(d); });
-    fetch(`/api/contacts/${contactId}/notes`).then(r => r.json()).then(d => { if (Array.isArray(d)) setNotes(d); });
+    // Labels list is fetched once (not per-contact) — only if not already loaded
+    if (allLabels.length === 0) {
+      fetch('/api/labels').then(r => r.json()).then(d => { if (Array.isArray(d)) setAllLabels(d); });
+    }
   }, [contactId]);
 
   const addNote = async () => {
     if (!newNote.trim()) return;
-    await fetch(`/api/contacts/${contactId}/notes`, {
+    const res = await fetch(`/api/contacts/${contactId}/notes`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content: newNote.trim() }),
     });
     setNewNote('');
-    fetch(`/api/contacts/${contactId}/notes`).then(r => r.json()).then(d => { if (Array.isArray(d)) setNotes(d); });
+    if (res.ok) {
+      // Refresh notes from consolidated endpoint (fast, DB-only)
+      const notesRes = await fetch(`/api/contacts/${contactId}/notes`);
+      if (notesRes.ok) {
+        const d = await notesRes.json();
+        if (Array.isArray(d)) setNotes(d);
+      }
+    }
   };
 
   const deleteNote = async (noteId: number) => {
@@ -61,8 +68,17 @@ export default function ContactDetail({ contactId, onClose }: ContactDetailProps
   const fetchDetail = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const res = await fetch(`/api/contacts/${contactId}/detail${apiQuery}`);
-      if (res.ok) setData(await res.json());
+      const sep = apiQuery.includes('?') ? '&' : '?';
+      const url = `/api/contacts/${contactId}/detail${apiQuery}${silent ? `${sep}skip_unipile=1` : ''}`;
+      const res = await fetch(url);
+      if (res.ok) {
+        const json = await res.json();
+        setData(json);
+        // Populate labels, events, notes from consolidated response
+        if (Array.isArray(json.labels)) setContactLabels(json.labels);
+        if (Array.isArray(json.events)) setTimeline(json.events);
+        if (Array.isArray(json.notes)) setNotes(json.notes);
+      }
     } finally { if (!silent) setLoading(false); }
   };
 

@@ -1,7 +1,37 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getEffectiveUser } from '@/lib/api-auth';
-import { contacts, users, globalConfig, messages, queue } from '@/lib/db';
+import { contacts, users, globalConfig, messages, queue, contactLabels, contactEvents, contactNotes } from '@/lib/db';
 import { getDb } from '@/lib/db';
+
+// ─── In-memory Unipile cache (5-minute TTL) ─────────────────────
+interface CacheEntry {
+  profile: any;
+  conversation: any[];
+  timestamp: number;
+}
+const unipileCache = new Map<string, CacheEntry>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+function getCached(key: string): CacheEntry | null {
+  const entry = unipileCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.timestamp > CACHE_TTL) {
+    unipileCache.delete(key);
+    return null;
+  }
+  return entry;
+}
+
+function setCache(key: string, profile: any, conversation: any[]) {
+  // Evict old entries if cache gets too large
+  if (unipileCache.size > 500) {
+    const now = Date.now();
+    unipileCache.forEach((v, k) => {
+      if (now - v.timestamp > CACHE_TTL) unipileCache.delete(k);
+    });
+  }
+  unipileCache.set(key, { profile, conversation, timestamp: Date.now() });
+}
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -10,6 +40,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const contactId = Number(params.id);
     const contact = contacts.getById(contactId, viewUserId) as any;
     if (!contact) return NextResponse.json({ error: 'Contact not found' }, { status: 404 });
+
+    // Check if this is a "skip_unipile" refresh (after sending a message)
+    const skipUnipile = req.nextUrl.searchParams.get('skip_unipile') === '1';
 
     // Use the contact owner's Unipile account for API calls
     const contactOwner = users.getById(contact.user_id || viewUserId) as any;
@@ -33,7 +66,6 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const allSent = [...manualMessages, ...sequenceMessages].sort((a, b) =>
       new Date(a.sent_at).getTime() - new Date(b.sent_at).getTime()
     );
-    // Deduplicate: if manual and sequence message have same content within 60s, keep manual
     const storedMessages = allSent.filter((msg, i) => {
       if (msg.source === 'sequence') {
         return !allSent.some(m => m.source === 'manual' && m.content === msg.content &&
@@ -49,76 +81,91 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       ORDER BY id ASC
     `).all(contactId, ownerId);
 
+    // Get labels, events, notes from DB (fast — no external API)
+    const labels = contactLabels.getByContact(contactId);
+    const events = contactEvents.getForContact(contactId);
+    const notes = contactNotes.getForContact(contactId);
+
     // Try to fetch LinkedIn profile and conversation from Unipile
     let linkedinProfile: any = null;
     let linkedinConversation: any[] = [];
 
-    if (cfg?.unipile_api_key && user?.unipile_account_id && contact.linkedin_url) {
-      const slugMatch = contact.linkedin_url.match(/linkedin\.com\/in\/([a-zA-Z0-9\-_.]+)/);
-      if (slugMatch) {
-        const dsn = cfg.unipile_dsn || 'api21.unipile.com:15135';
-        const baseUrl = `https://${dsn}/api/v1`;
-        const headers = { 'X-API-KEY': cfg.unipile_api_key, 'Accept': 'application/json' };
+    const cacheKey = contact.linkedin_url ? `${user?.unipile_account_id}:${contact.linkedin_url}` : '';
 
-        // Fetch profile
-        try {
-          const profileRes = await fetch(
-            `${baseUrl}/users/${slugMatch[1]}?account_id=${user.unipile_account_id}&linkedin_sections=*`,
-            { headers }
-          );
-          if (profileRes.ok) {
-            const p = await profileRes.json();
-            const localConnected = ['connected', 'msg_sent', 'replied', 'positive', 'meeting_booked'].includes(contact.status);
-            linkedinProfile = {
-              first_name: p.first_name,
-              last_name: p.last_name,
-              headline: p.headline,
-              location: p.location,
-              profile_picture_url: p.profile_picture_url || p.profile_picture_url_large,
-              is_relationship: p.is_relationship || localConnected,
-              network_distance: p.network_distance,
-              connections_count: p.connections_count,
-              follower_count: p.follower_count,
-              is_premium: p.is_premium,
-              provider_id: p.provider_id,
-            };
+    // If skip_unipile, use cached data
+    if (skipUnipile && cacheKey) {
+      const cached = getCached(cacheKey);
+      if (cached) {
+        linkedinProfile = cached.profile;
+        linkedinConversation = cached.conversation;
+      }
+    } else if (cfg?.unipile_api_key && user?.unipile_account_id && contact.linkedin_url) {
+      // Check cache first
+      const cached = getCached(cacheKey);
+      if (cached) {
+        linkedinProfile = cached.profile;
+        linkedinConversation = cached.conversation;
+      } else {
+        const slugMatch = contact.linkedin_url.match(/linkedin\.com\/in\/([a-zA-Z0-9\-_.]+)/);
+        if (slugMatch) {
+          const dsn = cfg.unipile_dsn || 'api21.unipile.com:15135';
+          const baseUrl = `https://${dsn}/api/v1`;
+          const headers = { 'X-API-KEY': cfg.unipile_api_key, 'Accept': 'application/json' };
 
-            // Fetch conversation if connected (check Unipile flags OR local contact status)
-            const isConnected = p.is_relationship || p.network_distance === 'FIRST_DEGREE'
-              || ['connected', 'msg_sent', 'replied', 'positive', 'meeting_booked'].includes(contact.status);
-            if (isConnected) {
-              try {
-                const providerId = p.provider_id || p.id;
-                const chatsRes = await fetch(
-                  `${baseUrl}/chats?account_id=${user.unipile_account_id}&attendee_id=${providerId}&limit=1`,
-                  { headers }
-                );
-                if (chatsRes.ok) {
-                  const chatsData = await chatsRes.json();
-                  let chatItems = chatsData.items || chatsData || [];
-                  let chatId = Array.isArray(chatItems) && chatItems.length > 0 ? chatItems[0].id : null;
+          try {
+            const profileRes = await fetch(
+              `${baseUrl}/users/${slugMatch[1]}?account_id=${user.unipile_account_id}&linkedin_sections=*`,
+              { headers, signal: AbortSignal.timeout(10000) }
+            );
+            if (profileRes.ok) {
+              const p = await profileRes.json();
+              const localConnected = ['connected', 'msg_sent', 'replied', 'positive', 'meeting_booked'].includes(contact.status);
+              linkedinProfile = {
+                first_name: p.first_name,
+                last_name: p.last_name,
+                headline: p.headline,
+                location: p.location,
+                profile_picture_url: p.profile_picture_url || p.profile_picture_url_large,
+                is_relationship: p.is_relationship || localConnected,
+                network_distance: p.network_distance,
+                connections_count: p.connections_count,
+                follower_count: p.follower_count,
+                is_premium: p.is_premium,
+                provider_id: p.provider_id,
+              };
 
-                  // Fallback: if attendee_id search found no chat, scan recent chats
-                  // for messages from this provider_id (Unipile's attendee filter is unreliable)
-                  if (!chatId) {
-                    try {
-                      const allChatsRes = await fetch(
-                        `${baseUrl}/chats?account_id=${user.unipile_account_id}&limit=50`,
-                        { headers }
-                      );
-                      if (allChatsRes.ok) {
-                        const allChats = await allChatsRes.json();
-                        const allChatItems = allChats.items || allChats || [];
-                        for (const chat of allChatItems) {
-                          const msgsCheck = await fetch(
-                            `${baseUrl}/chats/${chat.id}/messages?limit=3`,
-                            { headers }
-                          );
-                          if (msgsCheck.ok) {
-                            const msgsCheckData = await msgsCheck.json();
-                            const msgs = msgsCheckData.items || msgsCheckData || [];
-                            if (msgs.some((m: any) => (m.sender_id || m.sender?.id) === providerId || (!m.is_sender && msgs.some((m2: any) => m2.is_sender)))) {
-                              // Check specifically for our provider_id
+              const isConnected = p.is_relationship || p.network_distance === 'FIRST_DEGREE'
+                || ['connected', 'msg_sent', 'replied', 'positive', 'meeting_booked'].includes(contact.status);
+              if (isConnected) {
+                try {
+                  const providerId = p.provider_id || p.id;
+                  const chatsRes = await fetch(
+                    `${baseUrl}/chats?account_id=${user.unipile_account_id}&attendee_id=${providerId}&limit=1`,
+                    { headers, signal: AbortSignal.timeout(10000) }
+                  );
+                  if (chatsRes.ok) {
+                    const chatsData = await chatsRes.json();
+                    let chatItems = chatsData.items || chatsData || [];
+                    let chatId = Array.isArray(chatItems) && chatItems.length > 0 ? chatItems[0].id : null;
+
+                    // Fallback: scan only 10 recent chats (down from 50) to find the right one
+                    if (!chatId) {
+                      try {
+                        const allChatsRes = await fetch(
+                          `${baseUrl}/chats?account_id=${user.unipile_account_id}&limit=10`,
+                          { headers, signal: AbortSignal.timeout(10000) }
+                        );
+                        if (allChatsRes.ok) {
+                          const allChats = await allChatsRes.json();
+                          const allChatItems = allChats.items || allChats || [];
+                          for (const chat of allChatItems) {
+                            const msgsCheck = await fetch(
+                              `${baseUrl}/chats/${chat.id}/messages?limit=3`,
+                              { headers, signal: AbortSignal.timeout(8000) }
+                            );
+                            if (msgsCheck.ok) {
+                              const msgsCheckData = await msgsCheck.json();
+                              const msgs = msgsCheckData.items || msgsCheckData || [];
                               if (msgs.some((m: any) => (m.sender_id || m.sender?.id) === providerId)) {
                                 chatId = chat.id;
                                 break;
@@ -126,31 +173,34 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
                             }
                           }
                         }
-                      }
-                    } catch { /* fallback scan failed */ }
-                  }
+                      } catch { /* fallback scan failed */ }
+                    }
 
-                  if (chatId) {
-                    const msgsRes = await fetch(
-                      `${baseUrl}/chats/${chatId}/messages?limit=50`,
-                      { headers }
-                    );
-                    if (msgsRes.ok) {
-                      const msgsData = await msgsRes.json();
-                      linkedinConversation = (msgsData.items || msgsData || []).map((m: any) => ({
-                        id: m.id,
-                        text: m.text || m.body || '',
-                        sender_id: m.sender_id || m.sender?.id,
-                        is_me: m.sender_id !== providerId,
-                        timestamp: m.timestamp || m.created_at || m.date,
-                      })).reverse(); // oldest first
+                    if (chatId) {
+                      const msgsRes = await fetch(
+                        `${baseUrl}/chats/${chatId}/messages?limit=50`,
+                        { headers, signal: AbortSignal.timeout(10000) }
+                      );
+                      if (msgsRes.ok) {
+                        const msgsData = await msgsRes.json();
+                        linkedinConversation = (msgsData.items || msgsData || []).map((m: any) => ({
+                          id: m.id,
+                          text: m.text || m.body || '',
+                          sender_id: m.sender_id || m.sender?.id,
+                          is_me: m.sender_id !== providerId,
+                          timestamp: m.timestamp || m.created_at || m.date,
+                        })).reverse();
+                      }
                     }
                   }
-                }
-              } catch { /* conversation fetch failed, that's ok */ }
+                } catch { /* conversation fetch failed */ }
+              }
+
+              // Cache the result
+              setCache(cacheKey, linkedinProfile, linkedinConversation);
             }
-          }
-        } catch { /* profile fetch failed */ }
+          } catch { /* profile fetch failed */ }
+        }
       }
     }
 
@@ -160,6 +210,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       linkedinConversation,
       storedMessages,
       queueHistory,
+      labels,
+      events,
+      notes,
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

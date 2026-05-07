@@ -317,9 +317,13 @@ function initDb() {
     db.exec(`CREATE INDEX IF NOT EXISTS idx_daily_stats_date ON daily_stats(date, user_id)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_campaign_contacts ON campaign_contacts(campaign_id, contact_id)`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_contact_notes_contact ON contact_notes(contact_id)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_contact_labels_contact ON contact_labels(contact_id)`);
 
     db.exec('UPDATE schema_version SET version = 16');
   }
+
+  // Ensure indexes exist (safe to re-run even if migration already applied)
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_contact_labels_contact ON contact_labels(contact_id)`);
 
   // Activity log
   db.exec(`
