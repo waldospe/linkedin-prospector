@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Switch } from '@/components/ui/switch';
-import { Plus, Trash2, Edit2, GitBranch, ArrowRight } from 'lucide-react';
+import { Plus, Trash2, Edit2, Copy, GitBranch, ArrowRight } from 'lucide-react';
 import { useUser } from '@/components/user-context';
 import { FUNNEL_STAGES, stageColors, STAGE_MAP } from '@/lib/constants';
 import { EmptyState } from '@/components/empty-state';
@@ -37,7 +38,9 @@ interface Sequence {
 export default function SequencesPage() {
   const [sequences, setSequences] = useState<Sequence[]>([]);
   const [loading, setLoading] = useState(true);
+  const [duplicatingId, setDuplicatingId] = useState<number | null>(null);
   const { currentUser, apiQuery, viewAs } = useUser();
+  const router = useRouter();
 
   useEffect(() => {
     fetchSequences();
@@ -57,6 +60,23 @@ export default function SequencesPage() {
     if (!confirm('Delete this sequence? Contacts already in it will keep their queue items.')) return;
     await fetch(`/api/sequences/${id}`, { method: 'DELETE' });
     fetchSequences();
+  };
+
+  const duplicateSequence = async (seq: Sequence) => {
+    setDuplicatingId(seq.id);
+    try {
+      const res = await fetch(`/api/sequences/${seq.id}/duplicate${apiQuery}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) return;
+      const { id } = await res.json();
+      // Land on the copy's edit page so it can be renamed and edited right away.
+      router.push(`/sequences/${id}/edit`);
+    } finally {
+      setDuplicatingId(null);
+    }
   };
 
   const toggleActive = async (seq: Sequence, active: boolean) => {
@@ -151,6 +171,14 @@ export default function SequencesPage() {
                   >
                     <Edit2 size={14} />
                   </Link>
+                  <button
+                    onClick={() => duplicateSequence(seq)}
+                    disabled={duplicatingId === seq.id}
+                    title="Duplicate sequence"
+                    className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-secondary transition-all disabled:opacity-50"
+                  >
+                    <Copy size={14} />
+                  </button>
                   <button
                     onClick={() => deleteSequence(seq.id)}
                     className="p-1.5 rounded-md text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-all"

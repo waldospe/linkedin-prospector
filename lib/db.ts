@@ -904,6 +904,18 @@ export const sequences = {
     return getDb().prepare('INSERT INTO sequences (user_id, name, steps, visibility, shared_with_user_ids) VALUES (?, ?, ?, ?, ?)')
       .run(userId, name, JSON.stringify(steps), visibility || 'private', sharedWithUserIds || '');
   },
+  duplicate: (id: number, userId: number, newName?: string) => {
+    // Access check reuses the same visibility rules as getById (own/team/specific).
+    const src = sequences.getById(id, userId) as any;
+    if (!src) return null;
+    const steps = typeof src.steps === 'string' ? src.steps : JSON.stringify(src.steps);
+    const name = (newName && newName.trim()) || `Copy of ${src.name}`;
+    // Copy is owned by the current user, private, and inactive so it can be
+    // renamed/edited before it starts sending.
+    return getDb().prepare(
+      'INSERT INTO sequences (user_id, name, steps, active, visibility, shared_with_user_ids) VALUES (?, ?, ?, 0, ?, ?)'
+    ).run(userId, name, steps, 'private', '');
+  },
   update: (id: number, userId: number, data: { name?: string; steps?: any[]; active?: boolean; visibility?: string; shared_with_user_ids?: string }, isAdmin?: boolean) => {
     const seq = getDb().prepare('SELECT * FROM sequences WHERE id = ?').get(id) as any;
     if (!seq) return null;
