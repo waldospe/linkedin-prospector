@@ -71,7 +71,7 @@ export default function ContactsPage() {
   const [detailContactId, setDetailContactId] = useState<number | null>(null);
   const [bulkSequenceId, setBulkSequenceId] = useState('');
   const [newContact, setNewContact] = useState({ first_name: '', last_name: '', linkedin_url: '', company: '', title: '', sequence_id: '', avatar_url: '' });
-  const [sequencesList, setSequencesList] = useState<Array<{ id: number; name: string }>>([]);
+  const [sequencesList, setSequencesList] = useState<Array<{ id: number; name: string; active?: number }>>([]);
   const [importing, setImporting] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [importState, setImportState] = useState<ImportState>({
@@ -99,7 +99,7 @@ export default function ContactsPage() {
   useEffect(() => {
     fetchContacts();
     fetch('/api/sequences').then(r => r.json()).then(data => {
-      if (Array.isArray(data)) setSequencesList(data.filter((s: any) => s.active));
+      if (Array.isArray(data)) setSequencesList([...data].sort((a: any, b: any) => (b.active ? 1 : 0) - (a.active ? 1 : 0)));
     });
     fetch('/api/labels').then(r => r.json()).then(data => {
       if (Array.isArray(data)) setAllLabels(data);
@@ -114,7 +114,7 @@ export default function ContactsPage() {
   useEffect(() => {
     if (!showImport) return;
     fetch('/api/sequences').then(r => r.json()).then(data => {
-      if (Array.isArray(data)) setSequencesList(data.filter((s: any) => s.active));
+      if (Array.isArray(data)) setSequencesList([...data].sort((a: any, b: any) => (b.active ? 1 : 0) - (a.active ? 1 : 0)));
     });
   }, [showImport]);
 
@@ -554,7 +554,7 @@ export default function ContactsPage() {
                     <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Add to Sequence (optional)</label>
                     <select value={newContact.sequence_id} onChange={(e) => setNewContact({ ...newContact, sequence_id: e.target.value })} className="w-full h-10 bg-background/50 text-foreground text-sm rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50">
                       <option value="">None</option>
-                      {sequencesList.map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}
+                      {sequencesList.map(s => (<option key={s.id} value={s.id}>{s.name}{s.active ? '' : ' (inactive)'}</option>))}
                     </select>
                   </div>
                 )}
@@ -603,7 +603,7 @@ export default function ContactsPage() {
               <GitBranch size={14} className="text-muted-foreground" />
               <select value={bulkSequenceId} onChange={(e) => setBulkSequenceId(e.target.value)} className="h-8 bg-background/50 text-foreground text-xs rounded-lg px-2 border border-border focus:outline-none focus:border-blue-500/50">
                 <option value="">Select sequence...</option>
-                {sequencesList.map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}
+                {sequencesList.map(s => (<option key={s.id} value={s.id}>{s.name}{s.active ? '' : ' (inactive)'}</option>))}
               </select>
               <button onClick={bulkAssignSequence} disabled={!bulkSequenceId} className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-500 disabled:opacity-40 transition-all">
                 Add to Sequence
@@ -762,7 +762,7 @@ export default function ContactsPage() {
                     ) : sequencesList.length > 0 && !['opted_out'].includes(contact.status) ? (
                       <select defaultValue="" onChange={(e) => { if (e.target.value) assignSequence(contact.id, parseInt(e.target.value)); }} className="h-7 bg-secondary/50 text-foreground text-[11px] rounded-lg px-1.5 border border-border focus:outline-none focus:border-blue-500/50 cursor-pointer">
                         <option value="">+ Seq</option>
-                        {sequencesList.map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}
+                        {sequencesList.map(s => (<option key={s.id} value={s.id}>{s.name}{s.active ? '' : ' (inactive)'}</option>))}
                       </select>
                     ) : null}
                     <div className="relative">
@@ -1054,7 +1054,7 @@ export default function ContactsPage() {
                   <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Add to Sequence after import (optional)</label>
                   <select value={importState.sequenceId} onChange={(e) => setImportState(s => ({ ...s, sequenceId: e.target.value }))} className="w-full h-9 bg-background/50 text-foreground text-sm rounded-lg px-3 border border-border focus:outline-none focus:border-blue-500/50">
                     <option value="">None — import only</option>
-                    {sequencesList.map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}
+                    {sequencesList.map(s => (<option key={s.id} value={s.id}>{s.name}{s.active ? '' : ' (inactive)'}</option>))}
                   </select>
                 </div>
               )}
