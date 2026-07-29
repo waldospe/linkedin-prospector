@@ -109,6 +109,15 @@ export default function ContactsPage() {
     });
   }, [apiQuery, page, filterStatus, search, filterLabelIds]);
 
+  // Refresh the sequence list each time the import dialog opens so newly
+  // created/activated sequences show up without a full page reload.
+  useEffect(() => {
+    if (!showImport) return;
+    fetch('/api/sequences').then(r => r.json()).then(data => {
+      if (Array.isArray(data)) setSequencesList(data.filter((s: any) => s.active));
+    });
+  }, [showImport]);
+
   const fetchContacts = async () => {
     try {
       const sep = apiQuery.includes('?') ? '&' : '?';
